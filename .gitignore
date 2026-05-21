@@ -1,0 +1,26 @@
+# Binary
+fund-trace
+fund-trace-*
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python (original script's artifacts)
+__pycache__/
+*.pyc
+fund_cache.json
+
+# OpenCode
+.omo/
