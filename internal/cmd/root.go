@@ -52,7 +52,7 @@ Default behavior: launches an interactive TUI dashboard with auto-refresh.`,
 
 func loadDeps() error {
 	var err error
-	cfg, err = config.Load(configPath)
+	cfg, err = config.LoadOrCreate(configPath)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}

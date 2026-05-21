@@ -98,3 +98,58 @@ func TestDefaultSettings(t *testing.T) {
 		t.Errorf("expected 60, got %d", s.RefreshIntervalSec)
 	}
 }
+
+func TestDefaultFunds(t *testing.T) {
+	funds := DefaultFunds()
+	if len(funds) != 13 {
+		t.Errorf("expected 13 default funds, got %d", len(funds))
+	}
+	for _, f := range funds {
+		if len(f.Code) != 6 {
+			t.Errorf("fund code %q is not 6 digits", f.Code)
+		}
+	}
+}
+
+func TestLoadOrCreate_GeneratesOnMissing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	cfg, err := LoadOrCreate(path)
+	if err != nil {
+		t.Fatalf("LoadOrCreate() error: %v", err)
+	}
+	if len(cfg.Funds) != 13 {
+		t.Errorf("expected 13 default funds, got %d", len(cfg.Funds))
+	}
+	// Verify file was written
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t.Fatal("config.yaml was not created on disk")
+	}
+}
+
+func TestLoadOrCreate_UsesExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := `
+funds:
+  - code: "000001"
+settings:
+  refresh_interval_sec: 120
+`
+	os.WriteFile(path, []byte(content), 0644)
+
+	cfg, err := LoadOrCreate(path)
+	if err != nil {
+		t.Fatalf("LoadOrCreate() error: %v", err)
+	}
+	if len(cfg.Funds) != 1 {
+		t.Errorf("expected 1 fund, got %d", len(cfg.Funds))
+	}
+	if cfg.Funds[0].Code != "000001" {
+		t.Errorf("expected 000001, got %s", cfg.Funds[0].Code)
+	}
+	if cfg.Settings.RefreshIntervalSec != 120 {
+		t.Errorf("expected 120, got %d", cfg.Settings.RefreshIntervalSec)
+	}
+}
