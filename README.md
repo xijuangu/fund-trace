@@ -43,10 +43,19 @@
 # macOS (Intel):        fund-trace-darwin-amd64
 # Linux:                fund-trace-linux-amd64
 
-# 赋予执行权限后运行
-chmod +x fund-trace
-./fund-trace
+# macOS / Linux
+chmod +x fund-trace-darwin-arm64
+./fund-trace-darwin-arm64
 ```
+
+Windows 用户下载 `.exe` 文件，在终端中直接运行：
+
+```powershell
+# Windows（cmd 或 PowerShell）
+.\fund-trace-windows-amd64.exe
+```
+
+> Windows 终端需要支持 ANSI 转义序列才能正确显示颜色。Windows Terminal 和 PowerShell 5.1+ 均原生支持；旧版 cmd.exe 可能无法正常显示着色。
 
 首次运行自动创建 `fund-trace.db` 数据库文件，加载 `config.yaml` 中的基金列表。按 `q` 退出 TUI 界面。
 
