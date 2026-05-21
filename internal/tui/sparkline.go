@@ -16,6 +16,11 @@ func Sparkline(values []float64, width int) string {
 		return ""
 	}
 
+	// Never request more buckets than we have data points.
+	if width > len(values) {
+		width = len(values)
+	}
+
 	min, max := minMax(values)
 
 	// Flat line edge case — all values identical.
