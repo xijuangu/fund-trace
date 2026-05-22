@@ -15,7 +15,7 @@
 - `a` 添加股票：输入 `sh600519` 或 `sz000001` 格式，或 `stock:sh:600519`
 - `d` 删除资产：二次确认后移除，同步更新配置文件
 - `A` 设置涨跌告警：切换跌/涨类型，输入阈值百分比
-- `s` 打开设置面板：实时编辑刷新间隔、并发数等参数，Esc 保存到 config.yaml
+- `s` 打开设置面板：实时编辑刷新间隔、并发数、涨跌颜色方案等参数，Esc 保存到 config.yaml
 - `Enter` 查看详情：基金展示历史净值分析，股票展示实时行情 + 日 K 线 SMA/RSI 趋势分析
 - `h` 快捷键帮助浮层，随时查看所有可用操作
 
@@ -186,9 +186,12 @@ settings:
   alert_cooldown_min: 30
   max_concurrent_requests: 5
   db_path: fund-trace.db
+  change_color_scheme: green_up_red_down
 ```
 
 `db_path` 可选。不配置时，数据库默认创建在配置文件同目录下：默认 `config.yaml` 对应 `./fund-trace.db`；使用 `--config /path/to/config.yaml` 时对应 `/path/to/fund-trace.db`。如果配置了相对路径，也会按配置文件所在目录解析；绝对路径则直接使用。
+
+`change_color_scheme` 可选，默认 `green_up_red_down`（绿涨红跌）。也可设为 `red_up_green_down`（红涨绿跌）；TUI Settings 面板里可直接切换。
 
 ### 兼容格式（旧，自动迁移）
 

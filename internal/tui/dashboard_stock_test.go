@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"fund-trace/internal/analysis"
+	"fund-trace/internal/config"
 	"fund-trace/internal/model"
 	"fund-trace/internal/notifier"
 )
@@ -162,6 +163,27 @@ func TestStockSymbolsForFetchUsesAssetListWhenConfigIsStale(t *testing.T) {
 	got := m.stockSymbolsForFetch()
 	if len(got) != 1 || got[0] != "sh688435" {
 		t.Fatalf("expected dashboard refresh to use stock assets from DB, got %#v", got)
+	}
+}
+
+func TestSettingsIncludesColorSchemeToggle(t *testing.T) {
+	m := &Model{
+		appConfig: &config.Config{Settings: config.DefaultSettings()},
+	}
+
+	if got := m.settingsFieldLabel(4); got != "Change Color Scheme" {
+		t.Fatalf("expected color scheme settings label, got %q", got)
+	}
+	if got := m.settingsFieldValue(4); got != "Green Up / Red Down" {
+		t.Fatalf("expected default scheme label, got %q", got)
+	}
+
+	m.applySettingsValue(4, 0)
+	if got := m.appConfig.Settings.ChangeColorScheme; got != "red_up_green_down" {
+		t.Fatalf("expected toggled scheme red_up_green_down, got %q", got)
+	}
+	if got := m.settingsFieldValue(4); got != "Red Up / Green Down" {
+		t.Fatalf("expected toggled scheme label, got %q", got)
 	}
 }
 

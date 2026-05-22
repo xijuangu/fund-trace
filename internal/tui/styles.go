@@ -15,6 +15,11 @@ var (
 	magenta = lipgloss.Color("#E040FB")
 )
 
+const (
+	ColorSchemeGreenUpRedDown = "green_up_red_down"
+	ColorSchemeRedUpGreenDown = "red_up_green_down"
+)
+
 // Shared styles used across TUI and CLI rendering.
 var (
 	// HeaderStyle is used for column headers in the fund table.
@@ -60,6 +65,18 @@ var (
 	// DialogStyle wraps modal dialogs with a rounded border.
 	DialogStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(cyan).Padding(2).Width(60)
 )
+
+// ApplyChangeColorScheme configures gain/loss colors for all TUI and CLI renderers.
+func ApplyChangeColorScheme(scheme string) {
+	positiveColor := green
+	negativeColor := red
+	if scheme == ColorSchemeRedUpGreenDown {
+		positiveColor = red
+		negativeColor = green
+	}
+	PositiveStyle = lipgloss.NewStyle().Foreground(positiveColor)
+	NegativeStyle = lipgloss.NewStyle().Foreground(negativeColor)
+}
 
 // RenderChange formats a daily change percentage with sign and color.
 // Positive values get "+" prefix and green; negative get red; zero is dim.

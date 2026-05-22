@@ -222,6 +222,9 @@ func TestDefaultSettings(t *testing.T) {
 	if s.RefreshIntervalSec != 60 {
 		t.Errorf("expected 60, got %d", s.RefreshIntervalSec)
 	}
+	if s.ChangeColorScheme != "green_up_red_down" {
+		t.Errorf("expected default color scheme green_up_red_down, got %q", s.ChangeColorScheme)
+	}
 }
 
 func TestResolveDBPath_DefaultConfigUsesCurrentDirectory(t *testing.T) {

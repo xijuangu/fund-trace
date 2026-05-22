@@ -40,6 +40,7 @@ type Settings struct {
 	AlertCooldownMin      int    `yaml:"alert_cooldown_min"`
 	MaxConcurrentRequests int    `yaml:"max_concurrent_requests"`
 	DBPath                string `yaml:"db_path,omitempty"`
+	ChangeColorScheme     string `yaml:"change_color_scheme,omitempty"`
 }
 
 // FundCodes extracts fund codes from the configuration.
@@ -279,6 +280,13 @@ func (c *Config) Validate() error {
 	if c.Settings.MaxConcurrentRequests <= 0 {
 		c.Settings.MaxConcurrentRequests = 5
 	}
+	switch c.Settings.ChangeColorScheme {
+	case "", "green_up_red_down":
+		c.Settings.ChangeColorScheme = "green_up_red_down"
+	case "red_up_green_down":
+	default:
+		return fmt.Errorf("settings.change_color_scheme: unknown value %q (expected green_up_red_down or red_up_green_down)", c.Settings.ChangeColorScheme)
+	}
 	return nil
 }
 
@@ -288,6 +296,7 @@ func DefaultSettings() Settings {
 		CacheTTLMin:           6,
 		AlertCooldownMin:      30,
 		MaxConcurrentRequests: 5,
+		ChangeColorScheme:     "green_up_red_down",
 	}
 }
 

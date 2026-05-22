@@ -387,7 +387,7 @@ func (m *Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "j", "down":
 		if !m.settingsEditing {
-			m.settingsIdx = min(m.settingsIdx+1, 3)
+			m.settingsIdx = min(m.settingsIdx+1, 4)
 		}
 	case "k", "up":
 		if !m.settingsEditing {
@@ -395,6 +395,10 @@ func (m *Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter":
 		if !m.settingsEditing {
+			if m.settingsIdx == 4 {
+				m.applySettingsValue(m.settingsIdx, 0)
+				return m, nil
+			}
 			m.settingsEditing = true
 			ti := newTextInput()
 			ti.Width = 10
@@ -568,7 +572,7 @@ func (m *Model) keyHints() string {
 	case modeAlertSet:
 		return "[Enter] confirm  [t]oggle rise/drop  [Esc] back"
 	case modeSettings:
-		return "[j/k] navigate  [Enter] edit  [Esc] save & back"
+		return "[j/k] navigate  [Enter] edit/toggle  [Esc] save & back"
 	default:
 		return "[Esc] back"
 	}
@@ -645,7 +649,7 @@ func (m *Model) alertSetView() string {
 
 func (m *Model) settingsView() string {
 	var rows []string
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 5; i++ {
 		label := m.settingsFieldLabel(i)
 		value := m.settingsFieldValue(i)
 		row := fmt.Sprintf("  %s: %s", label, value)
@@ -662,7 +666,7 @@ func (m *Model) settingsView() string {
 			"",
 			lipgloss.JoinVertical(lipgloss.Left, rows...),
 			"",
-			StatusStyle.Render("[j/k] navigate  [Enter] edit  [Esc] save & back"),
+			StatusStyle.Render("[j/k] navigate  [Enter] edit/toggle  [Esc] save & back"),
 		),
 	)
 }
@@ -818,9 +822,9 @@ func (m *Model) helpView() string {
 			"  j/k or ↑/↓   Navigate asset rows",
 			"  a             Add fund or stock (6-digit → fund, sh/sz+code → stock)",
 			"  d             Delete selected asset",
-			"  A             Set alert (fund only)",
+			"  A             Set alert",
 			"  s             Open settings",
-			"  Enter         View detail (fund analysis / stock quote)",
+			"  Enter         View detail",
 			"  r             Manual refresh",
 			"  h             Show this help",
 			"  q or Esc      Quit application",
@@ -1204,6 +1208,8 @@ func (m *Model) settingsFieldLabel(idx int) string {
 		return "Alert Cooldown (min)"
 	case 3:
 		return "Max Concurrent Requests"
+	case 4:
+		return "Change Color Scheme"
 	default:
 		return ""
 	}
@@ -1219,6 +1225,11 @@ func (m *Model) settingsFieldValue(idx int) string {
 		return fmt.Sprintf("%d", m.appConfig.Settings.AlertCooldownMin)
 	case 3:
 		return fmt.Sprintf("%d", m.appConfig.Settings.MaxConcurrentRequests)
+	case 4:
+		if m.appConfig.Settings.ChangeColorScheme == ColorSchemeRedUpGreenDown {
+			return "Red Up / Green Down"
+		}
+		return "Green Up / Red Down"
 	default:
 		return ""
 	}
@@ -1234,6 +1245,13 @@ func (m *Model) applySettingsValue(idx int, val int) {
 		m.appConfig.Settings.AlertCooldownMin = val
 	case 3:
 		m.appConfig.Settings.MaxConcurrentRequests = val
+	case 4:
+		if m.appConfig.Settings.ChangeColorScheme == ColorSchemeRedUpGreenDown {
+			m.appConfig.Settings.ChangeColorScheme = ColorSchemeGreenUpRedDown
+		} else {
+			m.appConfig.Settings.ChangeColorScheme = ColorSchemeRedUpGreenDown
+		}
+		ApplyChangeColorScheme(m.appConfig.Settings.ChangeColorScheme)
 	}
 }
 

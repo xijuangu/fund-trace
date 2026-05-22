@@ -79,6 +79,7 @@ func loadDeps() error {
 	fc = fetcher.New(cfg.Settings.MaxConcurrentRequests)
 	fillMissingNames(st, fc)
 	nf = notifier.New(time.Duration(cfg.Settings.AlertCooldownMin) * time.Minute)
+	tui.ApplyChangeColorScheme(cfg.Settings.ChangeColorScheme)
 	return nil
 }
 
