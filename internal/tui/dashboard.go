@@ -423,23 +423,41 @@ func (m *Model) View() string {
 	if m.width == 0 {
 		return "Initializing...\n"
 	}
+	if m.mode == modeDetail {
+		return m.detailView()
+	}
 
+	base := m.normalView()
+	switch m.mode {
+	case modeAddFund:
+		return m.overlayModal(base, m.addFundView())
+	case modeConfirmDelete:
+		return m.overlayModal(base, m.confirmDeleteView())
+	case modeAlertSet:
+		return m.overlayModal(base, m.alertSetView())
+	case modeSettings:
+		return m.overlayModal(base, m.settingsView())
+	case modeHelp:
+		return m.overlayModal(base, m.helpView())
+	default:
+		return base
+	}
+}
+
+func (m *Model) normalView() string {
 	var sb strings.Builder
 
-	// ---- Header ----
 	header := TitleStyle.Render(" Fund Trace ")
 	timeStr := StatusStyle.Render(time.Now().Format("2006-01-02 15:04:05"))
 	headerLine := lipgloss.JoinHorizontal(lipgloss.Left, header, "    ", timeStr)
 	sb.WriteString(headerLine)
 	sb.WriteString("\n\n")
 
-	// ---- Error banner ----
 	if m.err != nil {
 		sb.WriteString(ErrorStyle.Render(fmt.Sprintf("  Error: %v", m.err)))
 		sb.WriteString("\n\n")
 	}
 
-	// ---- Table body ----
 	if m.loading && len(m.realtime) == 0 {
 		sb.WriteString(LoadingStyle.Render("  Fetching fund data..."))
 	} else {
@@ -447,17 +465,218 @@ func (m *Model) View() string {
 		sb.WriteString(RenderFundTable(rtFunds, m.navHistory, m.cursor))
 	}
 
-	// ---- Status bar ----
 	sb.WriteString("\n")
 	statusParts := m.buildStatusParts()
 	statusBar := StatusStyle.Render(strings.Join(statusParts, " | "))
 	sb.WriteString(statusBar)
 	sb.WriteString("\n")
 
-	// ---- Keybindings hint ----
-	sb.WriteString(StatusStyle.Render("[q]uit  [r]efresh"))
+	sb.WriteString(StatusStyle.Render(m.keyHints()))
+	return sb.String()
+}
+
+func (m *Model) overlayModal(base, modal string) string {
+	return base + "\n" + modal
+}
+
+func (m *Model) keyHints() string {
+	switch m.mode {
+	case modeNormal:
+		return "[q]uit  [r]efresh  [a]dd  [d]el  [A]lert  [s]ettings  [h]elp  [j/k] nav  [enter] detail"
+	case modeAddFund:
+		return "[Enter] confirm  [Esc] cancel"
+	case modeConfirmDelete:
+		return "[y]es delete  [n]o keep"
+	case modeAlertSet:
+		return "[Enter] confirm  [t]oggle rise/drop  [Esc] back"
+	case modeSettings:
+		return "[j/k] navigate  [Enter] edit  [Esc] save & back"
+	default:
+		return "[Esc] back"
+	}
+}
+
+func (m *Model) addFundView() string {
+	var sb strings.Builder
+	sb.WriteString(DialogStyle.Render(
+		lipgloss.JoinVertical(lipgloss.Left,
+			TitleStyle.Render("Add Fund"),
+			"",
+			m.textInput.View(),
+			"",
+			StatusStyle.Render("Enter 6-digit fund code, [Enter] to confirm"),
+		),
+	))
+	return sb.String()
+}
+
+func (m *Model) confirmDeleteView() string {
+	name := ""
+	if m.confirmTarget != nil {
+		name = m.confirmTarget.Name
+		if name == "" {
+			name = m.confirmTarget.Code
+		} else {
+			name = fmt.Sprintf("%s (%s)", name, m.confirmTarget.Code)
+		}
+	}
+	return DialogStyle.Render(
+		lipgloss.JoinVertical(lipgloss.Left,
+			TitleStyle.Render("Delete Fund"),
+			"",
+			fmt.Sprintf("  Remove %s ?", name),
+			"",
+			StatusStyle.Render("[y] Yes    [n] No"),
+		),
+	)
+}
+
+func (m *Model) alertSetView() string {
+	typeStr := "Drop"
+	if m.alertIsRise {
+		typeStr = "Rise"
+	}
+	code := ""
+	if m.alertTarget != nil {
+		code = m.alertTarget.Code
+	}
+	return DialogStyle.Render(
+		lipgloss.JoinVertical(lipgloss.Left,
+			TitleStyle.Render("Set Alert"),
+			"",
+			fmt.Sprintf("  Fund: %s", code),
+			fmt.Sprintf("  Type: %s  [t] toggle", typeStr),
+			"",
+			m.textInput.View(),
+			"",
+			StatusStyle.Render("Enter threshold %, [Enter] to confirm"),
+		),
+	)
+}
+
+func (m *Model) settingsView() string {
+	var rows []string
+	for i := 0; i < 4; i++ {
+		label := m.settingsFieldLabel(i)
+		value := m.settingsFieldValue(i)
+		row := fmt.Sprintf("  %s: %s", label, value)
+		if m.settingsEditing && i == m.settingsIdx {
+			row = row + "\n  > " + m.settingsEditInput.View()
+		} else if i == m.settingsIdx {
+			row = CursorStyle.Render(row)
+		}
+		rows = append(rows, row)
+	}
+	return DialogStyle.Render(
+		lipgloss.JoinVertical(lipgloss.Left,
+			TitleStyle.Render("Settings"),
+			"",
+			lipgloss.JoinVertical(lipgloss.Left, rows...),
+			"",
+			StatusStyle.Render("[j/k] navigate  [Enter] edit  [Esc] save & back"),
+		),
+	)
+}
+
+func (m *Model) detailView() string {
+	var sb strings.Builder
+
+	header := TitleStyle.Render(fmt.Sprintf(" Fund Detail: %s ", m.detailFund.Code))
+	if m.detailFund.Name != "" {
+		header += "  " + StatusStyle.Render(m.detailFund.Name)
+	}
+	sb.WriteString(header)
+	sb.WriteString("\n\n")
+
+	if m.detailLoading {
+		sb.WriteString(LoadingStyle.Render("  Loading history data..."))
+		sb.WriteString("\n")
+		return sb.String()
+	}
+
+	if m.err != nil {
+		sb.WriteString(ErrorStyle.Render(fmt.Sprintf("  Error: %v", m.err)))
+		sb.WriteString("\n")
+		return sb.String()
+	}
+
+	tr := m.detailTrend
+	sb.WriteString(fmt.Sprintf("  Direction:   %s\n", colorizeDirection(tr.Direction)))
+	sb.WriteString(fmt.Sprintf("  5-day change: %.2f%%\n", tr.Change5D))
+	sma5 := analysis.Latest(tr.SMA5)
+	sma20 := analysis.Latest(tr.SMA20)
+	rsi14 := analysis.Latest(tr.RSI14)
+	if !isNaN(sma5) {
+		sb.WriteString(fmt.Sprintf("  SMA(5):     %.4f\n", sma5))
+	}
+	if !isNaN(sma20) {
+		sb.WriteString(fmt.Sprintf("  SMA(20):    %.4f\n", sma20))
+	}
+	if !isNaN(rsi14) {
+		rsiLabel := "neutral"
+		if rsi14 > 70 {
+			rsiLabel = "overbought"
+		} else if rsi14 < 30 {
+			rsiLabel = "oversold"
+		}
+		sb.WriteString(fmt.Sprintf("  RSI(14):    %.2f (%s)\n", rsi14, rsiLabel))
+	}
+	sb.WriteString("\n")
+
+	sb.WriteString(HeaderStyle.Render("  Date          NAV        Change%"))
+	sb.WriteString("\n")
+	sb.WriteString(strings.Repeat("─", 50))
+	sb.WriteString("\n")
+
+	show := m.detailSnapshots
+	if len(show) > 10 {
+		show = show[len(show)-10:]
+	}
+	for i := len(show) - 1; i >= 0; i-- {
+		s := show[i]
+		chgStr := RenderChange(s.DailyGrowthPct)
+		sb.WriteString(fmt.Sprintf("  %s  %.4f  %s\n", s.Date, s.UnitNAV, chgStr))
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(StatusStyle.Render("[Esc] back to dashboard"))
 
 	return sb.String()
+}
+
+func (m *Model) helpView() string {
+	return DialogStyle.Render(
+		lipgloss.JoinVertical(lipgloss.Left,
+			TitleStyle.Render("Help"),
+			"",
+			"  j/k or ↑/↓   Navigate fund rows",
+			"  a             Add new fund",
+			"  d             Delete selected fund",
+			"  A             Set alert for selected fund",
+			"  s             Open settings",
+			"  Enter         View fund detail & trend",
+			"  r             Manual refresh",
+			"  h             Show this help",
+			"  q or Esc      Quit application",
+			"",
+			StatusStyle.Render("Press any key to return"),
+		),
+	)
+}
+
+func colorizeDirection(dir string) string {
+	switch dir {
+	case "up":
+		return PositiveStyle.Render(dir)
+	case "down":
+		return NegativeStyle.Render(dir)
+	default:
+		return ZeroStyle.Render(dir)
+	}
+}
+
+func isNaN(f float64) bool {
+	return f != f
 }
 
 // ---- Internal helpers ----
