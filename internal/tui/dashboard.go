@@ -312,6 +312,7 @@ func (m *Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		if kind == model.AssetKindFund {
 			m.store.RemoveFund(code)
+			m.store.RemoveAsset(model.AssetKindFund, "", code)
 			m.config.FundCodes = removeFromSlice(m.config.FundCodes, code)
 			m.appConfig.RemoveAsset("fund", "", code)
 		} else {
