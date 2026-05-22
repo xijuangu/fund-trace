@@ -687,12 +687,16 @@ func isNaN(f float64) bool {
 // ---- Internal helpers ----
 
 // resolveFundList builds an ordered slice of RealTimeFund matching m.fundList,
-// falling back to default values for funds that haven't been fetched yet.
+// falling back to DB names when the API returns no name (e.g. QDII funds).
 func (m *Model) resolveFundList() []model.RealTimeFund {
 	var rtFunds []model.RealTimeFund
 	for _, f := range m.fundList {
 		if rt, ok := m.realtime[f.Code]; ok && rt != nil {
-			rtFunds = append(rtFunds, *rt)
+			r := *rt
+			if r.Name == "" {
+				r.Name = f.Name
+			}
+			rtFunds = append(rtFunds, r)
 		} else {
 			rtFunds = append(rtFunds, model.RealTimeFund{
 				Code:      f.Code,

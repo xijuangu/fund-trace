@@ -20,13 +20,24 @@ var listCmd = &cobra.Command{
 		}
 		funds := fc.FetchAllRealTime(codes)
 
+		dbFunds, _ := st.ListFunds()
+		dbNames := make(map[string]string, len(dbFunds))
+		for _, f := range dbFunds {
+			dbNames[f.Code] = f.Name
+		}
+
 		var rtFunds []model.RealTimeFund
 		for _, code := range codes {
 			if rt, ok := funds[code]; ok && rt != nil {
-				rtFunds = append(rtFunds, *rt)
+				r := *rt
+				if r.Name == "" {
+					r.Name = dbNames[code]
+				}
+				rtFunds = append(rtFunds, r)
 			} else {
 				rtFunds = append(rtFunds, model.RealTimeFund{
 					Code:      code,
+					Name:      dbNames[code],
 					Available: false,
 				})
 			}
