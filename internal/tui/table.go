@@ -10,9 +10,9 @@ import (
 )
 
 // RenderAssetTable renders a colored table of mixed fund and stock data.
-// navHistory is optional: if non-nil, the Trend column shows sparklines
-// using the historical NAV values for each fund. Stocks always show "—".
-func RenderAssetTable(rows []AssetRow, navHistory map[string][]float64, cursor int) string {
+// trendHistory is optional: if non-nil, the Trend column shows sparklines
+// using historical daily change values keyed by model.QuoteKey.
+func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor int) string {
 	if len(rows) == 0 {
 		return LoadingStyle.Render("  Loading asset data...")
 	}
@@ -74,18 +74,9 @@ func RenderAssetTable(rows []AssetRow, navHistory map[string][]float64, cursor i
 		}
 
 		trendStr := "—"
-		if r.Kind == model.AssetKindFund && navHistory != nil {
-			if history, ok := navHistory[r.Code]; ok {
-				blocks := Sparkline(history, trendW)
-				var sb2 strings.Builder
-				for _, b := range blocks {
-					if b.Char == '▄' {
-						sb2.WriteString(ZeroStyle.Render(string(b.Char)))
-					} else {
-						sb2.WriteString(ColorizeChange(b.Value, string(b.Char)))
-					}
-				}
-				trendStr = sb2.String()
+		if trendHistory != nil {
+			if history, ok := trendHistory[model.QuoteKey(r.Kind, r.Market, r.Code)]; ok {
+				trendStr = renderSparkline(history, trendW)
 			}
 		}
 
@@ -103,6 +94,19 @@ func RenderAssetTable(rows []AssetRow, navHistory map[string][]float64, cursor i
 		sb.WriteString(row + "\n")
 	}
 
+	return sb.String()
+}
+
+func renderSparkline(history []float64, width int) string {
+	blocks := Sparkline(history, width)
+	var sb strings.Builder
+	for _, b := range blocks {
+		if b.Char == '▄' {
+			sb.WriteString(ZeroStyle.Render(string(b.Char)))
+		} else {
+			sb.WriteString(ColorizeChange(b.Value, string(b.Char)))
+		}
+	}
 	return sb.String()
 }
 
@@ -154,16 +158,7 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 		trendStr := "—"
 		if navHistory != nil {
 			if history, ok := navHistory[f.Code]; ok {
-				blocks := Sparkline(history, trendW)
-				var sb2 strings.Builder
-				for _, b := range blocks {
-					if b.Char == '▄' {
-						sb2.WriteString(ZeroStyle.Render(string(b.Char)))
-					} else {
-						sb2.WriteString(ColorizeChange(b.Value, string(b.Char)))
-					}
-				}
-				trendStr = sb2.String()
+				trendStr = renderSparkline(history, trendW)
 			}
 		}
 

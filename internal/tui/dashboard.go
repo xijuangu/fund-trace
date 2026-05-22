@@ -967,6 +967,47 @@ func (m *Model) checkStockAlerts(alerts []model.Alert) []model.Alert {
 	return m.notifier.CheckStockAlerts(quotes, alerts)
 }
 
+func (m *Model) fundCodesForFetch() []string {
+	if len(m.assetList) == 0 {
+		return append([]string(nil), m.config.FundCodes...)
+	}
+
+	codes := make([]string, 0, len(m.assetList))
+	seen := make(map[string]struct{})
+	for _, a := range m.assetList {
+		if a.Kind != model.AssetKindFund || a.Code == "" {
+			continue
+		}
+		if _, ok := seen[a.Code]; ok {
+			continue
+		}
+		seen[a.Code] = struct{}{}
+		codes = append(codes, a.Code)
+	}
+	return codes
+}
+
+func (m *Model) stockSymbolsForFetch() []string {
+	if len(m.assetList) == 0 {
+		return append([]string(nil), m.config.StockSymbols...)
+	}
+
+	symbols := make([]string, 0, len(m.assetList))
+	seen := make(map[string]struct{})
+	for _, a := range m.assetList {
+		if a.Kind != model.AssetKindStock || a.Market == "" || a.Code == "" {
+			continue
+		}
+		symbol := a.Market + a.Code
+		if _, ok := seen[symbol]; ok {
+			continue
+		}
+		seen[symbol] = struct{}{}
+		symbols = append(symbols, symbol)
+	}
+	return symbols
+}
+
 // ---- Commands ----
 
 // tickCmd returns a command that fires once after duration d.
@@ -990,21 +1031,24 @@ func heartbeatCmd() tea.Cmd {
 // fetchDataCmd fetches real-time fund data, stock quotes, AND historical NAV data for sparklines.
 func (m *Model) fetchDataCmd() tea.Cmd {
 	return func() tea.Msg {
-		funds := m.fetcher.FetchAllRealTime(m.config.FundCodes)
+		fundCodes := m.fundCodesForFetch()
+		stockSymbols := m.stockSymbolsForFetch()
+
+		funds := m.fetcher.FetchAllRealTime(fundCodes)
 
 		var stockQuotes map[string]*model.Quote
-		if len(m.config.StockSymbols) > 0 {
+		if len(stockSymbols) > 0 {
 			var err error
-			stockQuotes, err = m.fetcher.FetchStockQuotes(m.config.StockSymbols)
+			stockQuotes, err = m.fetcher.FetchStockQuotes(stockSymbols)
 			if err != nil {
 				slog.Warn("fetch stock quotes failed", "error", err)
 				stockQuotes = make(map[string]*model.Quote)
 			}
 		}
 
-		// Fetch nav history for sparklines (last 30 days, oldest→newest).
-		navHist := make(map[string][]float64)
-		for _, code := range m.config.FundCodes {
+		// Fetch trend history for sparklines (last 30 days, oldest→newest).
+		trendHist := make(map[string][]float64)
+		for _, code := range fundCodes {
 			snaps, err := m.store.GetNavHistory(code, 30)
 			if err != nil || len(snaps) == 0 {
 				continue
@@ -1017,13 +1061,33 @@ func (m *Model) fetchDataCmd() tea.Cmd {
 			if fund, ok := funds[code]; ok && fund != nil && fund.Available {
 				values = append(values, fund.DailyChangePct)
 			}
-			navHist[code] = values
+			trendHist[model.QuoteKey(model.AssetKindFund, "", code)] = values
+		}
+
+		for _, symbol := range stockSymbols {
+			if len(symbol) < 8 {
+				continue
+			}
+			market := symbol[:2]
+			code := symbol[2:]
+			snaps, err := m.store.GetPriceHistory(model.AssetKindStock, market, code, 30)
+			if err != nil || len(snaps) == 0 {
+				continue
+			}
+			values := make([]float64, len(snaps))
+			for i, snap := range snaps {
+				values[len(snaps)-1-i] = snap.ChangePct
+			}
+			if quote, ok := stockQuotes[symbol]; ok && quote != nil && quote.Available {
+				values = append(values, quote.ChangePct)
+			}
+			trendHist[model.QuoteKey(model.AssetKindStock, market, code)] = values
 		}
 
 		return dataFetchedMsg{
 			funds:       funds,
 			stockQuotes: stockQuotes,
-			navHistory:  navHist,
+			navHistory:  trendHist,
 		}
 	}
 }
@@ -1211,6 +1275,9 @@ func (m *Model) fetchAddAssetCmd(kind model.AssetKind, market, code string) tea.
 		}
 		if name != "" {
 			_ = m.store.AddAssetWithName(model.AssetKindStock, market, code, name, 0)
+		}
+		if snaps, err := m.fetcher.FetchStockHistory(market, code, 30); err == nil {
+			_ = m.store.SavePriceSnapshots(snaps)
 		}
 		return assetAddedMsg{kind: kind, market: market, code: code, name: name}
 	}

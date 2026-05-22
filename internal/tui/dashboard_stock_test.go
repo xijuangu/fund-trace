@@ -149,6 +149,22 @@ func TestCheckAlertsIncludesStocks(t *testing.T) {
 	}
 }
 
+func TestStockSymbolsForFetchUsesAssetListWhenConfigIsStale(t *testing.T) {
+	m := &Model{
+		config: Config{
+			StockSymbols: []string{"sh600519"},
+		},
+		assetList: []model.Asset{
+			{Kind: model.AssetKindStock, Market: "sh", Code: "688435", Name: "英方软件"},
+		},
+	}
+
+	got := m.stockSymbolsForFetch()
+	if len(got) != 1 || got[0] != "sh688435" {
+		t.Fatalf("expected dashboard refresh to use stock assets from DB, got %#v", got)
+	}
+}
+
 func TestHandleDetailFetchedIgnoresStaleStockError(t *testing.T) {
 	m := &Model{
 		detailAsset:   &model.Asset{Kind: model.AssetKindStock, Market: "sh", Code: "512800"},
