@@ -60,7 +60,11 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 				blocks := Sparkline(history, trendW)
 				var sb2 strings.Builder
 				for _, b := range blocks {
-					sb2.WriteString(ColorizeChange(b.Value, string(b.Char)))
+					if b.Char == '▄' {
+						sb2.WriteString(ZeroStyle.Render(string(b.Char)))
+					} else {
+						sb2.WriteString(ColorizeChange(b.Value, string(b.Char)))
+					}
 				}
 				trendStr = sb2.String()
 			}
