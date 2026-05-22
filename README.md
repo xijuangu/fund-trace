@@ -1,87 +1,98 @@
 # fund-trace
 
-中国公募基金实时跟踪终端工具。纯 Go 单二进制，SQLite 持久化，Bubble Tea TUI 仪表盘。下载即用，零外部依赖。
+中国公募基金实时跟踪终端工具。纯 Go 单二进制，SQLite 持久化，Bubble Tea TUI 交互仪表盘。下载即用，零外部依赖。
 
 ## 特性
 
+**TUI 交互操作**
+- 光标导航（j/k / ↑↓），选中行反显高亮
+- `a` 添加基金：输入 6 位代码，自动发现基金名称，立即生效并写入配置
+- `d` 删除基金：二次确认后移除，同步更新配置文件
+- `A` 设置涨跌告警：切换跌/涨类型，输入阈值百分比
+- `s` 打开设置面板：实时编辑刷新间隔、并发数等参数，Esc 保存到 config.yaml
+- `Enter` 查看基金详情：全屏展示 SMA/RSI 趋势分析 + 最近 10 天历史净值
+- `h` 快捷键帮助浮层，随时查看所有可用操作
+
 **数据获取**
-- 并发拉取天天基金实时估值，13 只基金同时请求，1-2 秒内返回
-- 自动发现基金名称——只需提供 6 位代码，系统从东方财富基金数据库匹配全称
+- 并发拉取天天基金实时估值，所有基金同时请求，1-2 秒内返回
+- 自动发现基金名称——只需 6 位代码，系统从东方财富 26400+ 基金数据库中匹配全称
+- 启动时自动补齐配置文件中缺失的基金名称
 - 支持历史净值查询，默认 30 天，可自定义天数
 
-**界面**
-- TUI 交互仪表盘，启动即进入全屏终端界面，自动刷新
-- 涨跌红绿着色——正值绿色、负值红色、零值灰色
-- 迷你趋势线，基于最近 30 天历史净值渲染 Unicode 柱状图
-- CLI 模式同样支持彩色输出，适配脚本和管道场景
+**Sparkline 趋势线**
+- 0% 锚定绝对坐标系：▁▂▃▄▅▆▇█，0% 固定在 ▄，正数往上、负数往下
+- 数据源为日涨跌幅，每个块直接反映当天涨跌幅度
+- 逐块独立染色：正值绿色、负值红色、▄（0% 附近）灰色
+- 最右块自动追加当日实时估值，始终与 Change% 列同步
 
 **持久化**
-- SQLite WAL 模式存储，崩溃安全，读写性能优于默认回滚日志
-- 四张表：`funds`（基金元数据）、`nav_snapshots`（每日净值快照）、`alerts`（告警规则）、`daily_summary`（每日汇总）
-- 首次运行自动建库建表，种子数据来自 `config.yaml`
+- SQLite WAL 模式存储，崩溃安全
+- 四张表：`funds`、`nav_snapshots`、`alerts`、`daily_summary`
+- 首次运行自动建库建表
+- TUI 增删操作自动写回 `config.yaml`，重启不丢失
 
 **分析**
-- SMA(5/10/20) 简单移动平均——短期/中期趋势判断
-- EMA 指数移动平均——近期价格权重更高
-- RSI(14) 相对强弱指数——超买 (>70) / 超卖 (<30) 信号
+- SMA(5/10/20) 简单移动平均 + EMA 指数移动平均
+- RSI(14) 相对强弱指数，含超买 (>70) / 超卖 (<30) 标识
 - 趋势方向判定：SMA5 vs SMA20 交叉
 
 **告警**
-- 支持跌幅告警（`--drop 3`）和涨幅告警（`--rise 5`）
-- 桌面通知（macOS 通知中心，Linux/Windows 对应系统通知）
-- 冷却机制——同一告警在冷却期内不重复推送，避免骚扰
+- 跌幅 / 涨幅告警，桌面通知（macOS 通知中心）
+- 冷却机制，同一告警在冷却期内不重复推送
 
 **导出**
-- CSV 格式——Excel/Numbers 可直接打开
-- HTML 格式——带内联样式的自包含页面，涨跌着色
+- CSV / HTML 双格式，文件名自动带日期戳
 
 ## 快速开始
 
-```bash
-# 下载对应平台的二进制文件
-# macOS (Apple Silicon): fund-trace-darwin-arm64
-# macOS (Intel):        fund-trace-darwin-amd64
-# Linux:                fund-trace-linux-amd64
+从 [Releases](https://github.com/xijuangu/fund-trace/releases) 下载对应平台的二进制文件。
 
+```bash
 # macOS / Linux
 chmod +x fund-trace-darwin-arm64
 ./fund-trace-darwin-arm64
-```
 
-Windows 用户下载 `.exe` 文件，在终端中直接运行：
-
-```powershell
-# Windows（cmd 或 PowerShell）
+# Windows（在 Windows Terminal 或 PowerShell 中运行）
 .\fund-trace-windows-amd64.exe
 ```
 
-> Windows 终端需要支持 ANSI 转义序列才能正确显示颜色。Windows Terminal 和 PowerShell 5.1+ 均原生支持；旧版 cmd.exe 可能无法正常显示着色。
+首次运行时若没有 `config.yaml`，会自动生成一份包含 13 只默认基金的配置文件。`fund-trace.db` 也会同时创建在当前目录。
 
-首次运行自动创建 `fund-trace.db` 数据库文件，加载 `config.yaml` 中的基金列表。按 `q` 退出 TUI 界面。
+## TUI 快捷键
 
-如需修改跟踪的基金，编辑 `config.yaml` 中的 `funds` 列表，或在运行时使用 `add`/`remove` 命令动态管理。
+| 键 | 功能 |
+|---|---|
+| `j` `k` `↑` `↓` | 移动光标，选中行反显高亮 |
+| `a` | 添加基金（输代码 → 回车确认，自动发现名称） |
+| `d` | 删除选中基金（`y` 确认 / `n` 取消） |
+| `A` | 为选中基金设置告警（`t` 切换跌/涨，输阈值 → 回车） |
+| `s` | 设置面板（`j`/`k` 选字段，回车编辑，Esc 保存并退出） |
+| `Enter` | 查看选中基金详情：趋势分析 + 历史净值表 |
+| `h` | 帮助浮层（任意键关闭） |
+| `r` | 手动刷新数据 |
+| `q` `Esc` | 退出（弹窗模式下 Esc = 关闭弹窗） |
 
 ## 命令参考
 
 ### `fund-trace`（默认）
 
-启动全屏 TUI 仪表盘。自动刷新（默认 60 秒间隔），显示所有跟踪基金的实时估值、涨跌幅、趋势线。
+启动全屏 TUI 交互仪表盘。
 
 ```
-基金 Trace                           2026-05-21 14:35:22
+ Fund Trace                           2026-05-22 10:30:00
 
- Code      Name                      NAV         Change %      Trend      
-────────────────────────────────────────────────────────────────────────
-001595    天弘中证银行ETF联接C      1.6445      +0.22%        ▁▃▅▆█    
-011513    天弘中证新能源车C         1.3317      -1.40%        ▅▄▃▂▁    
+ Code      Name                      NAV         Change %      Trend       
+ ────────────────────────────────────────────────────────────────────────
+ 001595    天弘中证银行ETF联接C      1.6450      +0.04%        ▄▄▄▂▂▄▄▄▃▃ 
+ 008087    华夏中证5G通信主题ETF联…  3.1259      +2.77%        ▆▂▄▄▆▅▆▂▄▂ 
 
-Last update: 14:35:22 | Next refresh: 54s
-[q]uit  [r]efresh
+ Last update: 10:30:00 | Next refresh: 52s
+ [j/k]nav  [Enter]detail  [a]dd  [d]el  [A]lert  [s]ettings  [h]elp  [r]efresh  [q]uit
 ```
 
 ### `fund-trace list`
 
-以表格形式列出所有跟踪基金的当前实时数据，适合脚本和快速查看。
+表格形式列出所有基金的当前实时数据。
 
 ```bash
 $ fund-trace list
@@ -89,7 +100,7 @@ $ fund-trace list
 
 ### `fund-trace add <code>`
 
-添加一只新基金。系统自动从东方财富基金数据库查找对应的基金全称。
+添加基金，自动发现名称。
 
 ```bash
 $ fund-trace add 000001
@@ -98,7 +109,7 @@ Added fund 000001: 华夏成长混合
 
 ### `fund-trace remove <code>`
 
-从跟踪列表中移除一只基金。别名：`rm`。
+移除基金。别名：`rm`。
 
 ```bash
 $ fund-trace remove 000001
@@ -107,17 +118,17 @@ Removed fund 000001
 
 ### `fund-trace history <code> [--days N]`
 
-查看基金历史净值，附带技术分析指标。
+历史净值 + 技术分析。
 
 ```bash
 $ fund-trace history 011513 --days 60
 
 === History: 011513 (60 days) ===
 
-Date         NAV    Change%
-─────────────────────────────────────
-2026-05-20   1.3400 +1.52%
-2026-05-19   1.3200 -0.75%
+Date         NAV      Change%
+────────────────────────────────
+2026-05-20   1.3400   +1.52%
+2026-05-19   1.3200   -0.75%
 ...
 
 === Trend Analysis ===
@@ -128,23 +139,18 @@ Date         NAV    Change%
   RSI(14):     42.35 (neutral)
 ```
 
-数据优先从本地 SQLite 缓存读取；缓存不足时自动从东方财富 API 拉取并存入本地。
-
 ### `fund-trace alert set <code> --drop 3`
 
-设置跌幅告警。当日跌幅达到或超过 3% 时推送桌面通知。也支持 `--rise` 设置涨幅告警。
+设置告警阈值。也支持 `--rise`。
 
 ```bash
 $ fund-trace alert set 011513 --drop 3
 Alert #1 set: 011513 will notify on 3.0% drop
-
-$ fund-trace alert set 007531 --rise 5
-Alert #2 set: 007531 will notify on 5.0% rise
 ```
 
 ### `fund-trace alert list`
 
-列出所有已配置的告警规则。
+列出所有告警。
 
 ```bash
 $ fund-trace alert list
@@ -154,142 +160,110 @@ $ fund-trace alert list
 ID  Code     Type   Threshold  Status
 ──────────────────────────────────────────
 1   011513   drop    -3.0%     active
-2   007531   rise    +5.0%     active
 ```
 
 ### `fund-trace alert remove <id>`
 
-按 ID 移除一条告警规则。别名：`rm`。
+按 ID 移除告警。别名：`rm`。
 
 ```bash
 $ fund-trace alert remove 1
-Removed alert #1
 ```
 
 ### `fund-trace export [--format csv|html]`
 
-导出当前实时数据为 CSV 或 HTML 文件。文件名自动带日期戳（如 `fund-data-2026-05-21.csv`）。
+导出实时数据。
 
 ```bash
-$ fund-trace export -f csv
-Exported to fund-data-2026-05-21.csv
-
-$ fund-trace export -f html
-Exported to fund-data-2026-05-21.html
+$ fund-trace export -f csv   # → fund-data-2026-05-22.csv
+$ fund-trace export -f html  # → fund-data-2026-05-22.html
 ```
 
 ### `fund-trace monitor`
 
-`fund-trace` 的别名，同样启动 TUI 仪表盘。支持缩写 `mon`。
-
-```bash
-$ fund-trace mon
-```
+TUI 仪表盘的别名，支持缩写 `mon`。
 
 ## 配置文件
 
-`config.yaml` 是全局配置入口，必须与二进制文件放在同一目录，或通过 `-c` 指定路径。
+`config.yaml` 与二进制放在同一目录，或用 `-c` 指定路径。首次运行不存在时自动生成。
 
 ```yaml
 funds:
-  - code: "011513"   # 天弘中证新能源车C
-  - code: "011925"   # 嘉实港股互联网产业核心资产C
-  - code: "017435"   # 华宝中证沪港深新消费指数C
-  - code: "012734"   # 易方达中证人工智能主题ETF联接C
-  - code: "008087"   # 华夏中证5G通信主题ETF联接C
-  - code: "011609"   # 易方达上证科创50联接C
-  - code: "012349"   # 天弘恒生科技ETF联接C
-  - code: "007531"   # 华宝券商ETF联接C
-  - code: "001595"   # 天弘中证银行ETF联接C
-  - code: "016068"   # 鹏华新能源汽车混合C
-  - code: "021492"   # 中航远见领航混合发起C
-  - code: "562500"   # 机器人ETF华夏
-  - code: "024913"   # 华夏国证通用航空产业ETF发起式联接C
+  - code: "011513"
+  - code: "011925"
 
 settings:
-  refresh_interval_sec: 60   # TUI 自动刷新间隔（秒）
-  cache_ttl_min: 6            # API 缓存有效期（分钟），暂未启用
-  alert_cooldown_min: 30      # 同一告警规则的最小触发间隔（分钟）
-  max_concurrent_requests: 5  # 并发 API 请求数上限
+  refresh_interval_sec: 60   # TUI 刷新间隔（秒）
+  cache_ttl_min: 6            # API 缓存有效期（分钟）
+  alert_cooldown_min: 30      # 同一告警最小触发间隔（分钟）
+  max_concurrent_requests: 5  # 并发请求数上限
 ```
 
-**配置项说明：**
+TUI 中的增删操作会自动写回 `config.yaml`，无需手动编辑。
 
-| 字段 | 类型 | 默认值 | 说明 |
-|---|---|---|---|
-| `funds[].code` | string | — | 6 位基金代码，必填 |
-| `refresh_interval_sec` | int | 60 | TUI 面板刷新间隔。值过小会增加 API 请求频率 |
-| `cache_ttl_min` | int | 6 | API 数据内存缓存有效期（预留字段） |
-| `alert_cooldown_min` | int | 30 | 两分钟内同一只基金的同一类告警只触发一次 |
-| `max_concurrent_requests` | int | 5 | 并发请求数上限。受信号量控制，防止瞬间大量连接 |
+## 文件位置
 
-启动时 `config.yaml` 中的基金列表会被写入 SQLite 数据库。后续通过 `fund-trace add` 或 `fund-trace remove` 更新的基金信息会同步写入数据库，但不会回写到 YAML 文件——`config.yaml` 始终保持为手动编辑的源文件。
+| 文件 | 默认路径 | 用途 |
+|---|---|---|
+| `config.yaml` | `./config.yaml` | 基金列表与全局配置 |
+| `fund-trace.db` | `./fund-trace.db` | SQLite 数据库 |
+
+均在执行目录下生成。可通过 `-c` 指定自定义配置文件路径。
 
 ## 构建
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/xijuangu/fund-trace.git
 cd fund-trace
 go build -o fund-trace .
 ```
 
-要求 Go 1.22 或更高版本。构建产物为静态链接的单一二进制文件（macOS 约 15MB）。
-
-交叉编译其他平台：
+要求 Go 1.22+。纯 Go 实现，无需 CGO。交叉编译：
 
 ```bash
 GOOS=linux  GOARCH=amd64 go build -o fund-trace-linux-amd64  .
-GOOS=linux  GOARCH=arm64 go build -o fund-trace-linux-arm64  .
 GOOS=windows GOARCH=amd64 go build -o fund-trace-windows.exe .
 ```
-
-所有依赖使用纯 Go 实现（`modernc.org/sqlite`），无需 CGO、无需安装任何系统库。
 
 ## 技术栈
 
 | 组件 | 库 |
 |---|---|
-| CLI 框架 | `github.com/spf13/cobra` |
-| TUI 仪表盘 | `github.com/charmbracelet/bubbletea` |
-| 终端样式 | `github.com/charmbracelet/lipgloss` |
-| SQLite 驱动 | `modernc.org/sqlite`（纯 Go，零 CGO） |
-| 桌面通知 | `github.com/gen2brain/beeep` |
-| YAML 配置 | `gopkg.in/yaml.v3` |
-| 测试 | Go 标准库 `testing` + `httptest`（模拟 API） |
+| CLI | `spf13/cobra` |
+| TUI | `charmbracelet/bubbletea` + `bubbles/textinput` |
+| 样式 | `charmbracelet/lipgloss` |
+| SQLite | `modernc.org/sqlite`（纯 Go） |
+| 通知 | `gen2brain/beeep` |
+| 配置 | `gopkg.in/yaml.v3` |
 
 ## 数据源
 
-本工具使用两个公开的中国金融数据 API，无需任何 API Key：
+无需 API Key。
 
-| 数据源 | 用途 | 接口地址 |
-|---|---|---|
-| 天天基金 | 实时估值（盘中净值估算） | `fundgz.1234567.com.cn/js/{code}.js` |
-| 东方财富 | 历史净值（每日单位净值） | `api.fund.eastmoney.com/f10/lsjz` |
-| 东方财富 | 基金名称发现（全量基金列表） | `fund.eastmoney.com/js/fundcode_search.js` |
+| 数据源 | 用途 |
+|---|---|
+| 天天基金 `fundgz.1234567.com.cn` | 实时估值 |
+| 东方财富 `api.fund.eastmoney.com` | 历史净值 |
+| 东方财富 `fund.eastmoney.com/js/fundcode_search.js` | 基金名称发现（26400+ 条） |
 
-**注意事项：**
-- 天天基金自 2022 年起仅对指数型基金提供实时估值数据，非指数型基金（混合型、债券型等）的实时估值字段可能为空，系统会显示 `—`
-- 历史净值数据来自东方财富，通常包含过去 30 天至数年的每日净值记录
-- 两个接口均无官方速率限制，但本工具内置信号量控制并发数，避免对服务器造成压力
-- 所有数据仅供个人参考，不构成投资建议
+> 天天基金自 2022 年起仅对指数型基金提供实时估值，QDII、混合型等基金实时估值不可用，系统会正确显示基金名称但净值列标记为 `—`。所有数据仅供个人参考，不构成投资建议。
 
 ## 项目结构
 
 ```
 fund-trace/
-├── main.go                   # 入口（3行）
-├── go.mod / go.sum           # 依赖管理
-├── config.yaml               # 基金列表与全局配置
-├── README.md
+├── main.go
+├── go.mod / go.sum
+├── config.yaml
 └── internal/
-    ├── model/                # 数据模型（Fund, RealTimeFund, NavSnapshot, Alert）
-    ├── config/               # YAML 配置解析与校验
-    ├── store/                # SQLite 持久化（WAL 模式，4 张表，事务批量写入）
-    ├── fetcher/              # 并发 API 客户端（信号量限流、指数退避重试、JSONP 解析）
-    ├── analysis/             # 技术指标计算（SMA, EMA, RSI, 趋势判定）
-    ├── notifier/             # 桌面通知（beeep，带冷却去重）
-    ├── tui/                  # Bubble Tea 终端仪表盘（自动刷新、CJK 对齐、迷你趋势线）
-    └── cmd/                  # Cobra CLI 命令定义（7 个子命令）
+    ├── model/       # Fund, RealTimeFund, NavSnapshot, Alert
+    ├── config/      # YAML 解析、校验、Save
+    ├── store/       # SQLite WAL, 4 表 CRUD
+    ├── fetcher/     # 并发 API 客户端, 信号量, 重试
+    ├── analysis/    # SMA, EMA, RSI, TrendSummary
+    ├── notifier/    # 桌面通知, 冷却去重
+    ├── tui/         # Bubble Tea 仪表盘, Sparkline, 模态弹窗
+    └── cmd/         # Cobra 命令行定义
 ```
 
 ## 许可
