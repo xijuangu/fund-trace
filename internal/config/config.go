@@ -65,24 +65,31 @@ func (c *Config) StockEntries() []struct{ Market, Code string } {
 
 // AddFund appends a fund to the configuration.
 func (c *Config) AddFund(code string) {
+	for _, a := range c.Assets {
+		if a.Kind == "fund" && a.Market == "" && a.Code == code {
+			return
+		}
+	}
 	c.Assets = append(c.Assets, AssetEntry{Kind: "fund", Code: code})
 }
 
-// AddStock appends a stock to the configuration.
 func (c *Config) AddStock(market, code string) {
+	for _, a := range c.Assets {
+		if a.Kind == "stock" && a.Market == market && a.Code == code {
+			return
+		}
+	}
 	c.Assets = append(c.Assets, AssetEntry{Kind: "stock", Market: market, Code: code})
 }
 
 // RemoveAsset removes an asset by kind, market, and code.
 func (c *Config) RemoveAsset(kind, market, code string) {
-	filtered := make([]AssetEntry, 0, len(c.Assets))
-	for _, a := range c.Assets {
+	for i, a := range c.Assets {
 		if a.Kind == kind && a.Market == market && a.Code == code {
-			continue
+			c.Assets = append(c.Assets[:i], c.Assets[i+1:]...)
+			return
 		}
-		filtered = append(filtered, a)
 	}
-	c.Assets = filtered
 }
 
 // AllAssetCodes returns all kind+market+code combinations for seeding the store.

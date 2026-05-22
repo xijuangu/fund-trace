@@ -445,6 +445,13 @@ func (m *Model) handleAssetAdded(msg assetAddedMsg) (tea.Model, tea.Cmd) {
 		m.appConfig.AddStock(msg.market, msg.code)
 	}
 	m.appConfig.Save(m.configPath)
+
+	for _, a := range m.assetList {
+		if a.Kind == msg.kind && a.Market == msg.market && a.Code == msg.code {
+			m.err = fmt.Errorf("asset already exists: %s/%s", msg.market, msg.code)
+			return m, nil
+		}
+	}
 	m.assetList = append(m.assetList, model.Asset{
 		Kind:   msg.kind,
 		Market: msg.market,
