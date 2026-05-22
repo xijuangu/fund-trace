@@ -66,12 +66,12 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 			padRight(name, nameW) + "  " +
 			padRight(navStr, navW) + "  " +
 			padRight(changeStr, changeW) + "  " +
-			padRight(trendStr, trendW) + "\n"
+			padRight(trendStr, trendW)
 
 		if i == cursor {
-			row = CursorStyle.Render(row)
+			row = "\033[7m" + row + "\033[0m"
 		}
-		sb.WriteString(row)
+		sb.WriteString(row + "\n")
 	}
 
 	return sb.String()
