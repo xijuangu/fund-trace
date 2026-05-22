@@ -623,9 +623,11 @@ func (m *Model) detailView() string {
 	}
 	sb.WriteString("\n")
 
-	sb.WriteString(HeaderStyle.Render("  Date          NAV        Change%"))
+	sb.WriteString(HeaderStyle.Render(
+		padRight("Date", 14) + padRight("NAV", 12) + "Change%",
+	))
 	sb.WriteString("\n")
-	sb.WriteString(strings.Repeat("─", 50))
+	sb.WriteString(strings.Repeat("─", 40))
 	sb.WriteString("\n")
 
 	show := m.detailSnapshots
@@ -635,7 +637,7 @@ func (m *Model) detailView() string {
 	for i := len(show) - 1; i >= 0; i-- {
 		s := show[i]
 		chgStr := RenderChange(s.DailyGrowthPct)
-		sb.WriteString(fmt.Sprintf("  %s  %.4f  %s\n", s.Date, s.UnitNAV, chgStr))
+		sb.WriteString(padRight(s.Date, 14) + padRight(fmt.Sprintf("%.4f", s.UnitNAV), 12) + chgStr + "\n")
 	}
 
 	sb.WriteString("\n")

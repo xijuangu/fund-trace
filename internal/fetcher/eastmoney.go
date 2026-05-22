@@ -3,6 +3,7 @@ package fetcher
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"time"
@@ -86,10 +87,12 @@ func (c *Client) FetchFundList() ([]model.FundListEntry, error) {
 	}
 	defer resp.Body.Close()
 
-	// Read full body as string for regex parsing
-	var buf = make([]byte, 1024*1024) // 1MB should be enough for ~27k entries
-	n, _ := resp.Body.Read(buf)
-	body := string(buf[:n])
+	// Read full body for regex parsing (the file is ~2MB, ~27k fund entries).
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read fund list body: %w", err)
+	}
+	body := string(data)
 
 	matches := fundListRE.FindAllStringSubmatch(body, -1)
 	var entries []model.FundListEntry
