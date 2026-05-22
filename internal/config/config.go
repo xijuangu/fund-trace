@@ -87,6 +87,17 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+func (c *Config) Save(path string) error {
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("write config %s: %w", path, err)
+	}
+	return nil
+}
+
 func (c *Config) Validate() error {
 	if len(c.Funds) == 0 {
 		return fmt.Errorf("no funds configured")

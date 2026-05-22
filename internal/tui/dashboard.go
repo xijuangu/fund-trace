@@ -6,13 +6,30 @@ import (
 	"strings"
 	"time"
 
+	"fund-trace/internal/analysis"
+	"fund-trace/internal/config"
 	"fund-trace/internal/fetcher"
 	"fund-trace/internal/model"
 	"fund-trace/internal/notifier"
 	"fund-trace/internal/store"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+)
+
+// ---- Mode ----
+
+type mode int
+
+const (
+	modeNormal        mode = iota
+	modeAddFund
+	modeConfirmDelete
+	modeAlertSet
+	modeSettings
+	modeDetail
+	modeHelp
 )
 
 // ---- Messages ----
@@ -28,6 +45,20 @@ type dataFetchedMsg struct {
 	funds      map[string]*model.RealTimeFund
 	navHistory map[string][]float64
 	err        error
+}
+
+// fundAddedMsg carries the result of adding a new fund via API.
+type fundAddedMsg struct {
+	code string
+	name string
+	err  error
+}
+
+// detailFetchedMsg carries historical data and trend analysis for a fund.
+type detailFetchedMsg struct {
+	snapshots []model.NavSnapshot
+	trend     analysis.TrendResult
+	err       error
 }
 
 // ---- Config ----
@@ -47,9 +78,26 @@ type Model struct {
 	notifier *notifier.Notifier
 	config   Config
 
+	appConfig  *config.Config
+	configPath string
+
 	fundList   []model.Fund
 	realtime   map[string]*model.RealTimeFund
-	navHistory map[string][]float64 // fund code → historical NAV series for sparklines
+	navHistory map[string][]float64
+
+	mode          mode
+	cursor        int
+	textInput     textinput.Model
+	confirmTarget *model.Fund
+	alertTarget   *model.Fund
+	alertIsRise   bool
+	settingsIdx        int
+	settingsEditing    bool
+	settingsEditInput  textinput.Model
+	detailFund         *model.Fund
+	detailSnapshots    []model.NavSnapshot
+	detailTrend        analysis.TrendResult
+	detailLoading      bool
 
 	width     int
 	height    int
@@ -59,14 +107,23 @@ type Model struct {
 	quitting  bool
 }
 
+func newTextInput() textinput.Model {
+	ti := textinput.New()
+	ti.Width = 20
+	ti.CharLimit = 6
+	ti.Placeholder = "000000"
+	return ti
+}
+
 // NewDashboard creates a ready-to-run Bubble Tea Model.
-// codes and refreshInterval come from the caller (typically main / CLI).
 func NewDashboard(
 	st *store.Store,
 	fc *fetcher.Client,
 	nf *notifier.Notifier,
 	codes []string,
 	refreshInterval time.Duration,
+	appCfg *config.Config,
+	cfgPath string,
 ) *Model {
 	funds, err := st.ListFunds()
 	if err != nil {
@@ -85,10 +142,14 @@ func NewDashboard(
 			RefreshInterval: refreshInterval,
 			FundCodes:       codes,
 		},
+		appConfig:  appCfg,
+		configPath: cfgPath,
 		fundList:   funds,
 		realtime:   make(map[string]*model.RealTimeFund),
 		navHistory: make(map[string][]float64),
 		loading:    true,
+		mode:       modeNormal,
+		cursor:     0,
 	}
 }
 
@@ -174,7 +235,7 @@ func (m *Model) View() string {
 		sb.WriteString(LoadingStyle.Render("  Fetching fund data..."))
 	} else {
 		rtFunds := m.resolveFundList()
-		sb.WriteString(RenderFundTable(rtFunds, m.navHistory))
+		sb.WriteString(RenderFundTable(rtFunds, m.navHistory, m.cursor))
 	}
 
 	// ---- Status bar ----

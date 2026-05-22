@@ -12,7 +12,7 @@ import (
 // RenderFundTable renders a colored table of real-time fund data.
 // navHistory is optional: if non-nil, the Trend column shows sparklines
 // using the historical NAV values for each fund.
-func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64) string {
+func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64, cursor int) string {
 	if len(funds) == 0 {
 		return LoadingStyle.Render("  Loading fund data...")
 	}
@@ -44,7 +44,7 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 	sb.WriteString("\n")
 
 	// ------ Rows ------
-	for _, f := range funds {
+	for i, f := range funds {
 		name := truncateByWidth(f.Name, nameW)
 
 		navStr := fmt.Sprintf("%.4f", f.EstimatedNAV)
@@ -62,13 +62,16 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 			}
 		}
 
-		sb.WriteString(
-			padRight(f.Code, codeW) + "  " +
-				padRight(name, nameW) + "  " +
-				padRight(navStr, navW) + "  " +
-				padRight(changeStr, changeW) + "  " +
-				padRight(trendStr, trendW) + "\n",
-		)
+		row := padRight(f.Code, codeW) + "  " +
+			padRight(name, nameW) + "  " +
+			padRight(navStr, navW) + "  " +
+			padRight(changeStr, changeW) + "  " +
+			padRight(trendStr, trendW) + "\n"
+
+		if i == cursor {
+			row = CursorStyle.Render(row)
+		}
+		sb.WriteString(row)
 	}
 
 	return sb.String()

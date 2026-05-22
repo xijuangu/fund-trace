@@ -41,7 +41,7 @@ Default behavior: launches an interactive TUI dashboard with auto-refresh.`,
 			codes[i] = f.Code
 		}
 		refresh := time.Duration(cfg.Settings.RefreshIntervalSec) * time.Second
-		dash := tui.NewDashboard(st, fc, nf, codes, refresh)
+		dash := tui.NewDashboard(st, fc, nf, codes, refresh, cfg, configPath)
 		p := tea.NewProgram(dash, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("TUI error: %w", err)

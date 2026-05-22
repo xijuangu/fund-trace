@@ -34,7 +34,7 @@ var listCmd = &cobra.Command{
 		sort.Slice(rtFunds, func(i, j int) bool {
 			return rtFunds[i].Code < rtFunds[j].Code
 		})
-		fmt.Print(tui.RenderFundTable(rtFunds, nil))
+		fmt.Print(tui.RenderFundTable(rtFunds, nil, -1))
 		return nil
 	},
 }

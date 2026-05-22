@@ -53,6 +53,12 @@ var (
 
 	// ErrorStyle renders error messages.
 	ErrorStyle = lipgloss.NewStyle().Foreground(red)
+
+	// CursorStyle highlights the currently selected fund row.
+	CursorStyle = lipgloss.NewStyle().Background(lipgloss.Color("#3C3C3C")).Foreground(lipgloss.Color("#FFFFFF"))
+
+	// DialogStyle wraps modal dialogs with a rounded border.
+	DialogStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(cyan).Padding(2).Width(60)
 )
 
 // RenderChange formats a daily change percentage with sign and color.
