@@ -70,7 +70,7 @@ func loadDeps() error {
 	}
 
 	for _, code := range fundCodes {
-		_ = st.AddAssetSimple(model.AssetKindFund, "", code)
+		_ = seedConfiguredFund(st, code)
 	}
 	for _, s := range stocks {
 		_ = st.AddAssetSimple(model.AssetKindStock, s.Market, s.Code)

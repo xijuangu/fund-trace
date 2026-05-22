@@ -22,7 +22,7 @@ var historyCmd = &cobra.Command{
 		if len(code) != 6 {
 			return fmt.Errorf("invalid code %q: must be 6 digits", code)
 		}
-		if isStockCode(code) {
+		if isStockHistoryRequest(cfg, code) {
 			return fmt.Errorf("stock history is not yet implemented for %s", code)
 		}
 
@@ -90,11 +90,4 @@ var historyCmd = &cobra.Command{
 
 func init() {
 	historyCmd.Flags().IntVar(&historyDays, "days", 30, "number of days of history to fetch")
-}
-
-func isStockCode(code string) bool {
-	if len(code) != 6 {
-		return false
-	}
-	return code[0] == '0' || code[0] == '3' || code[0] == '6'
 }

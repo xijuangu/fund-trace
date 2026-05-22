@@ -16,7 +16,7 @@ var removeCmd = &cobra.Command{
 		if len(code) != 6 {
 			return fmt.Errorf("invalid fund code %q: must be 6 digits", code)
 		}
-		if err := st.RemoveFund(code); err != nil {
+		if err := persistRemovedFund(st, cfg, configPath, code); err != nil {
 			return fmt.Errorf("remove fund: %w", err)
 		}
 		fmt.Printf("Removed fund %s\n", code)

@@ -82,15 +82,15 @@ $ fund-trace add 000001
 Added fund 000001: 华夏成长混合
 ```
 
-### `fund-trace add stock <code> [market]`
+### `fund-trace stock add <code>`
 
 添加 A 股股票。市场自动推断：6 开头 → sh，0/3 开头 → sz。也可显式指定。
 
 ```bash
-$ fund-trace add stock 600519        # 自动推断 sh
-$ fund-trace add stock sh 600519     # 显式指定
-$ fund-trace add stock 000001        # 自动推断 sz
-$ fund-trace add stock 300750        # 自动推断 sz
+$ fund-trace stock add 600519        # 自动推断 sh
+$ fund-trace stock add sh 600519     # 显式指定
+$ fund-trace stock add 000001        # 自动推断 sz
+$ fund-trace stock add 300750        # 自动推断 sz
 ```
 
 ### `fund-trace remove <code>`
@@ -102,12 +102,13 @@ $ fund-trace remove 000001
 Removed fund 000001
 ```
 
-### `fund-trace remove stock <code> [market]`
+### `fund-trace stock remove <code>`
 
 移除股票。
 
 ```bash
-$ fund-trace remove stock 600519
+$ fund-trace stock remove 600519
+$ fund-trace stock remove sh 600519
 ```
 
 ### `fund-trace history <code> [--days N]`

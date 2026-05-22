@@ -1,18 +1,55 @@
-funds:
-    - code: "011513"
-    - code: "011925"
-    - code: "017435"
-    - code: "012734"
-    - code: "008087"
-    - code: "011609"
-    - code: "012349"
-    - code: "007531"
-    - code: "001595"
-    - code: "016068"
-    - code: "021492"
-    - code: "024913"
-    - code: "562500"
-    - code: "012062"
+assets:
+    - kind: fund
+      market: ""
+      code: "011513"
+    - kind: fund
+      market: ""
+      code: "011925"
+    - kind: fund
+      market: ""
+      code: "017435"
+    - kind: fund
+      market: ""
+      code: "012734"
+    - kind: fund
+      market: ""
+      code: "008087"
+    - kind: fund
+      market: ""
+      code: "011609"
+    - kind: fund
+      market: ""
+      code: "012349"
+    - kind: fund
+      market: ""
+      code: "007531"
+    - kind: fund
+      market: ""
+      code: "001595"
+    - kind: fund
+      market: ""
+      code: "016068"
+    - kind: fund
+      market: ""
+      code: "021492"
+    - kind: fund
+      market: ""
+      code: "024913"
+    - kind: fund
+      market: ""
+      code: "562500"
+    - kind: stock
+      market: sh
+      code: "588790"
+    - kind: fund
+      market: ""
+      code: "018734"
+    - kind: fund
+      market: ""
+      code: "512800"
+    - kind: stock
+      market: sh
+      code: "512800"
 settings:
     refresh_interval_sec: 60
     cache_ttl_min: 6

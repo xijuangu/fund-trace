@@ -33,7 +33,7 @@ from East Money's fund database.`,
 		// Determine fund type from name
 		fundType := detectFundType(name)
 
-		if err := st.AddFundWithName(code, name, fundType); err != nil {
+		if err := persistAddedFund(st, cfg, configPath, code, name, fundType); err != nil {
 			return fmt.Errorf("add fund: %w", err)
 		}
 		if name != "" {

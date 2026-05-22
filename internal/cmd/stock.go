@@ -14,7 +14,7 @@ var stockCmd = &cobra.Command{
 }
 
 var stockAddCmd = &cobra.Command{
-	Use:   "add <code> [market]",
+	Use:   "add <code> | add <market> <code>",
 	Short: "Add an A-share stock by 6-digit code",
 	Long: `Add a Chinese A-share stock by its 6-digit code.
 Market is auto-inferred: codes starting with 6 → sh, 0 or 3 → sz.
@@ -55,7 +55,7 @@ Specify market explicitly: fund-trace stock add sh 600519`,
 }
 
 var stockRemoveCmd = &cobra.Command{
-	Use:     "remove <code> [market]",
+	Use:     "remove <code> | remove <market> <code>",
 	Aliases: []string{"rm"},
 	Short:   "Remove a tracked stock",
 	Args:    cobra.RangeArgs(1, 2),
