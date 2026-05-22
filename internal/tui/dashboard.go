@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ import (
 type mode int
 
 const (
-	modeNormal        mode = iota
+	modeNormal mode = iota
 	modeAddFund
 	modeConfirmDelete
 	modeAlertSet
@@ -57,11 +58,12 @@ type assetAddedMsg struct {
 	err    error
 }
 
-// detailFetchedMsg carries historical data and trend analysis for a fund.
+// detailFetchedMsg carries historical data and trend analysis for a fund or stock.
 type detailFetchedMsg struct {
-	snapshots []model.NavSnapshot
-	trend     analysis.TrendResult
-	err       error
+	snapshots      []model.NavSnapshot
+	priceSnapshots []model.PriceSnapshot
+	trend          analysis.TrendResult
+	err            error
 }
 
 // ---- Config ----
@@ -111,19 +113,20 @@ type Model struct {
 	stockQuotes map[string]*model.Quote
 	navHistory  map[string][]float64
 
-	mode          mode
-	cursor        int
-	textInput     textinput.Model
-	confirmTarget *model.Asset
-	alertTarget   *model.Asset
-	alertIsRise   bool
-	settingsIdx        int
-	settingsEditing    bool
-	settingsEditInput  textinput.Model
-	detailAsset        *model.Asset
-	detailSnapshots    []model.NavSnapshot
-	detailTrend        analysis.TrendResult
-	detailLoading      bool
+	mode                 mode
+	cursor               int
+	textInput            textinput.Model
+	confirmTarget        *model.Asset
+	alertTarget          *model.Asset
+	alertIsRise          bool
+	settingsIdx          int
+	settingsEditing      bool
+	settingsEditInput    textinput.Model
+	detailAsset          *model.Asset
+	detailSnapshots      []model.NavSnapshot
+	detailPriceSnapshots []model.PriceSnapshot
+	detailTrend          analysis.TrendResult
+	detailLoading        bool
 
 	width     int
 	height    int
@@ -170,24 +173,24 @@ func NewDashboard(
 	}
 
 	return &Model{
-		store:      st,
-		fetcher:    fc,
-		notifier:   nf,
+		store:    st,
+		fetcher:  fc,
+		notifier: nf,
 		config: Config{
 			RefreshInterval: refreshInterval,
 			FundCodes:       codes,
 			StockSymbols:    stockSyms,
 		},
-		appConfig:  appCfg,
-		configPath: cfgPath,
-		assetList:  assets,
-		stockSym:   stockSyms,
-		realtime:   make(map[string]*model.RealTimeFund),
+		appConfig:   appCfg,
+		configPath:  cfgPath,
+		assetList:   assets,
+		stockSym:    stockSyms,
+		realtime:    make(map[string]*model.RealTimeFund),
 		stockQuotes: make(map[string]*model.Quote),
-		navHistory: make(map[string][]float64),
-		loading:    true,
-		mode:       modeNormal,
-		cursor:     0,
+		navHistory:  make(map[string][]float64),
+		loading:     true,
+		mode:        modeNormal,
+		cursor:      0,
 	}
 }
 
@@ -360,6 +363,9 @@ func (m *Model) updateAlertSet(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.store.UpsertAlert(model.Alert{
 			FundCode:     m.alertTarget.Code,
+			Kind:         m.alertTarget.Kind,
+			Market:       m.alertTarget.Market,
+			Code:         m.alertTarget.Code,
 			Type:         at,
 			ThresholdPct: threshold,
 			Enabled:      true,
@@ -470,6 +476,7 @@ func (m *Model) handleDetailFetched(msg detailFetchedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.detailSnapshots = msg.snapshots
+	m.detailPriceSnapshots = msg.priceSnapshots
 	m.detailTrend = msg.trend
 	return m, nil
 }
@@ -656,6 +663,18 @@ func (m *Model) detailView() string {
 		sb.WriteString(header)
 		sb.WriteString("\n\n")
 
+		if m.detailLoading {
+			sb.WriteString(LoadingStyle.Render("  Loading stock history data..."))
+			sb.WriteString("\n")
+			return sb.String()
+		}
+
+		if m.err != nil {
+			sb.WriteString(ErrorStyle.Render(fmt.Sprintf("  Error: %v", m.err)))
+			sb.WriteString("\n")
+			return sb.String()
+		}
+
 		if q, ok := m.stockQuotes[sym]; ok && q != nil {
 			sb.WriteString(fmt.Sprintf("  Name:        %s\n", q.Name))
 			priceStr := fmt.Sprintf("%.2f", q.Value)
@@ -668,8 +687,47 @@ func (m *Model) detailView() string {
 			sb.WriteString("  No quote data available.\n")
 		}
 		sb.WriteString("\n")
-		sb.WriteString(StatusStyle.Render("历史分析暂未实现"))
-		sb.WriteString("\n\n")
+		tr := m.detailTrend
+		sb.WriteString(fmt.Sprintf("  Direction:   %s\n", colorizeDirection(tr.Direction)))
+		sb.WriteString(fmt.Sprintf("  5-day change: %.2f%%\n", tr.Change5D))
+		sma5 := analysis.Latest(tr.SMA5)
+		sma20 := analysis.Latest(tr.SMA20)
+		rsi14 := analysis.Latest(tr.RSI14)
+		if !isNaN(sma5) {
+			sb.WriteString(fmt.Sprintf("  SMA(5):     %.2f\n", sma5))
+		}
+		if !isNaN(sma20) {
+			sb.WriteString(fmt.Sprintf("  SMA(20):    %.2f\n", sma20))
+		}
+		if !isNaN(rsi14) {
+			rsiLabel := "neutral"
+			if rsi14 > 70 {
+				rsiLabel = "overbought"
+			} else if rsi14 < 30 {
+				rsiLabel = "oversold"
+			}
+			sb.WriteString(fmt.Sprintf("  RSI(14):    %.2f (%s)\n", rsi14, rsiLabel))
+		}
+		sb.WriteString("\n")
+
+		sb.WriteString(HeaderStyle.Render(
+			padRight("Date", 14) + padRight("Close", 12) + "Change%",
+		))
+		sb.WriteString("\n")
+		sb.WriteString(strings.Repeat("─", 40))
+		sb.WriteString("\n")
+
+		show := m.detailPriceSnapshots
+		if len(show) > 10 {
+			show = show[len(show)-10:]
+		}
+		for i := len(show) - 1; i >= 0; i-- {
+			s := show[i]
+			chgStr := RenderChange(s.ChangePct)
+			sb.WriteString(padRight(s.Date, 14) + padRight(fmt.Sprintf("%.2f", s.Close), 12) + chgStr + "\n")
+		}
+
+		sb.WriteString("\n")
 		sb.WriteString(StatusStyle.Render("[Esc] back to dashboard"))
 		return sb.String()
 	}
@@ -851,7 +909,7 @@ func (m *Model) buildStatusParts() []string {
 }
 
 func (m *Model) checkAlerts() {
-	if m.notifier == nil || len(m.realtime) == 0 {
+	if m.notifier == nil || (len(m.realtime) == 0 && len(m.stockQuotes) == 0) {
 		return
 	}
 
@@ -868,13 +926,31 @@ func (m *Model) checkAlerts() {
 	}
 
 	triggered := m.notifier.CheckAlerts(rtFunds, alerts)
+	triggered = append(triggered, m.checkStockAlerts(alerts)...)
 	if len(triggered) > 0 {
 		nameMap := make(map[string]string, len(m.assetList))
 		for _, a := range m.assetList {
-			nameMap[a.Code] = a.Name
+			if a.Kind == model.AssetKindStock {
+				nameMap[model.QuoteKey(a.Kind, a.Market, a.Code)] = a.Name
+			} else {
+				nameMap[a.Code] = a.Name
+			}
 		}
 		m.notifier.NotifyTriggered(triggered, nameMap)
 	}
+}
+
+func (m *Model) checkStockAlerts(alerts []model.Alert) []model.Alert {
+	if m.notifier == nil {
+		return nil
+	}
+	var quotes []model.Quote
+	for _, q := range m.stockQuotes {
+		if q != nil {
+			quotes = append(quotes, *q)
+		}
+	}
+	return m.notifier.CheckStockAlerts(quotes, alerts)
 }
 
 // ---- Commands ----
@@ -1007,10 +1083,6 @@ func (m *Model) enterAlertSet() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	target := m.assetList[m.cursor]
-	if target.Kind == model.AssetKindStock {
-		m.err = fmt.Errorf("股票告警暂未实现")
-		return m, nil
-	}
 	m.alertTarget = &target
 	m.alertIsRise = false
 	m.mode = modeAlertSet
@@ -1031,9 +1103,10 @@ func (m *Model) enterDetail() (tea.Model, tea.Cmd) {
 	m.mode = modeDetail
 
 	if target.Kind == model.AssetKindStock {
-		m.detailLoading = false
+		m.detailLoading = true
 		m.detailSnapshots = nil
-		return m, nil
+		m.detailPriceSnapshots = nil
+		return m, m.fetchStockDetailCmd(target.Market, target.Code)
 	}
 
 	m.detailLoading = true
@@ -1149,6 +1222,36 @@ func (m *Model) fetchDetailCmd(code string) tea.Cmd {
 		}
 		trend := analysis.TrendSummary(chrono)
 		return detailFetchedMsg{snapshots: chrono, trend: trend}
+	}
+}
+
+func (m *Model) fetchStockDetailCmd(market, code string) tea.Cmd {
+	return func() tea.Msg {
+		snaps, err := m.store.GetPriceHistory(model.AssetKindStock, market, code, 60)
+		if err != nil {
+			return detailFetchedMsg{err: err}
+		}
+		if len(snaps) < 5 {
+			fetched, ferr := m.fetcher.FetchStockHistory(market, code, 60)
+			if ferr != nil {
+				return detailFetchedMsg{err: ferr}
+			}
+			_ = m.store.SavePriceSnapshots(fetched)
+			snaps = fetched
+		}
+		if len(snaps) == 0 {
+			return detailFetchedMsg{err: fmt.Errorf("no stock history for %s%s", market, code)}
+		}
+		chrono := append([]model.PriceSnapshot(nil), snaps...)
+		sort.Slice(chrono, func(i, j int) bool {
+			return chrono[i].Date < chrono[j].Date
+		})
+		closes := make([]float64, len(chrono))
+		for i, snap := range chrono {
+			closes[i] = snap.Close
+		}
+		trend := analysis.TrendSummaryFromValues(closes)
+		return detailFetchedMsg{priceSnapshots: chrono, trend: trend}
 	}
 }
 

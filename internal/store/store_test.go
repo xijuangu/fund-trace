@@ -624,3 +624,58 @@ func TestAlertWithNullTime(t *testing.T) {
 		t.Fatal("expected alert with NULL LastTriggeredAt")
 	}
 }
+
+func TestSaveAndGetPriceHistory(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+
+	snaps := []model.PriceSnapshot{
+		{
+			Kind:      model.AssetKindStock,
+			Market:    "sh",
+			Code:      "600519",
+			Date:      "2026-05-20",
+			Open:      1405,
+			High:      1415,
+			Low:       1400,
+			Close:     1410,
+			Volume:    100000,
+			Amount:    1412000000,
+			ChangePct: -0.5,
+		},
+		{
+			Kind:      model.AssetKindStock,
+			Market:    "sh",
+			Code:      "600519",
+			Date:      "2026-05-21",
+			Open:      1410,
+			High:      1415,
+			Low:       1400,
+			Close:     1405,
+			Volume:    120000,
+			Amount:    1692000000,
+			ChangePct: 0.35,
+		},
+	}
+
+	if err := s.SavePriceSnapshots(snaps); err != nil {
+		t.Fatalf("SavePriceSnapshots: %v", err)
+	}
+	if err := s.SavePriceSnapshots(snaps); err != nil {
+		t.Fatalf("SavePriceSnapshots duplicate: %v", err)
+	}
+
+	got, err := s.GetPriceHistory(model.AssetKindStock, "sh", "600519", 10)
+	if err != nil {
+		t.Fatalf("GetPriceHistory: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 unique snapshots, got %d", len(got))
+	}
+	if got[0].Date != "2026-05-21" || got[1].Date != "2026-05-20" {
+		t.Fatalf("expected DESC date order, got %#v", got)
+	}
+	if got[0].Close != 1405 || got[0].ChangePct != 0.35 {
+		t.Fatalf("unexpected latest snapshot: %#v", got[0])
+	}
+}

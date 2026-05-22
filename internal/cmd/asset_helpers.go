@@ -7,22 +7,26 @@ import (
 )
 
 func isStockHistoryRequest(cfg *config.Config, code string) bool {
+	isStock, _, _ := resolveStockHistoryRequest(cfg, code)
+	return isStock
+}
+
+func resolveStockHistoryRequest(cfg *config.Config, code string) (isStock bool, market string, resolvedCode string) {
 	if cfg == nil {
-		return false
+		return false, "", code
 	}
-	foundStock := false
 	for _, a := range cfg.Assets {
 		if a.Code != code {
 			continue
 		}
 		switch a.Kind {
 		case "fund", "":
-			return false
+			return false, "", code
 		case "stock":
-			foundStock = true
+			return true, a.Market, a.Code
 		}
 	}
-	return foundStock
+	return false, "", code
 }
 
 func seedConfiguredFund(st *store.Store, code string) error {

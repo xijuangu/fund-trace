@@ -50,7 +50,6 @@ func EMA(values []float64, period int) []float64 {
 	if period > len(values) {
 		return result
 	}
-	// First EMA value is SMA of first 'period' values
 	sum := 0.0
 	for i := 0; i < period; i++ {
 		sum += values[i]
@@ -82,7 +81,6 @@ func RSI(values []float64, period int) ([]float64, error) {
 		result[i] = math.NaN()
 	}
 
-	// First RSI uses simple average of gains/losses
 	var avgGain, avgLoss float64
 	for i := 1; i <= period; i++ {
 		change := values[i] - values[i-1]
@@ -102,7 +100,6 @@ func RSI(values []float64, period int) ([]float64, error) {
 		result[period] = 100.0 - (100.0 / (1.0 + rs))
 	}
 
-	// Smoothed RSI for remaining values
 	for i := period + 1; i < len(values); i++ {
 		change := values[i] - values[i-1]
 		var gain, loss float64
@@ -134,27 +131,21 @@ type TrendResult struct {
 	Change5D  float64 // 5-day NAV change percentage
 }
 
-// TrendSummary computes all indicators from NAV snapshots.
-// Snapshots must be in chronological order (oldest first).
-func TrendSummary(snapshots []model.NavSnapshot) TrendResult {
-	if len(snapshots) == 0 {
+// TrendSummaryFromValues computes all indicators from a slice of float64 values
+// (e.g. NAV series, stock close prices). Values must be in chronological order.
+func TrendSummaryFromValues(values []float64) TrendResult {
+	if len(values) == 0 {
 		return TrendResult{Direction: "sideways"}
 	}
 
-	navs := make([]float64, len(snapshots))
-	for i, s := range snapshots {
-		navs[i] = s.UnitNAV
-	}
-
 	tr := TrendResult{
-		SMA5:  SMA(navs, 5),
-		SMA10: SMA(navs, 10),
-		SMA20: SMA(navs, 20),
+		SMA5:  SMA(values, 5),
+		SMA10: SMA(values, 10),
+		SMA20: SMA(values, 20),
 	}
-	rsi14, _ := RSI(navs, 14)
+	rsi14, _ := RSI(values, 14)
 	tr.RSI14 = rsi14
 
-	// Direction: compare latest SMA5 vs SMA20
 	if len(tr.SMA5) >= 20 && len(tr.SMA20) >= 20 && !math.IsNaN(tr.SMA5[len(tr.SMA5)-1]) && !math.IsNaN(tr.SMA20[len(tr.SMA20)-1]) {
 		if tr.SMA5[len(tr.SMA5)-1] > tr.SMA20[len(tr.SMA20)-1]*1.01 {
 			tr.Direction = "up"
@@ -167,12 +158,24 @@ func TrendSummary(snapshots []model.NavSnapshot) TrendResult {
 		tr.Direction = "sideways"
 	}
 
-	// 5-day change
-	if len(navs) >= 5 {
-		tr.Change5D = ((navs[len(navs)-1] - navs[len(navs)-5]) / navs[len(navs)-5]) * 100
+	if len(values) >= 5 {
+		tr.Change5D = ((values[len(values)-1] - values[len(values)-5]) / values[len(values)-5]) * 100
 	}
 
 	return tr
+}
+
+// TrendSummary computes all indicators from NAV snapshots.
+// Snapshots must be in chronological order (oldest first).
+func TrendSummary(snapshots []model.NavSnapshot) TrendResult {
+	if len(snapshots) == 0 {
+		return TrendResult{Direction: "sideways"}
+	}
+	navs := make([]float64, len(snapshots))
+	for i, s := range snapshots {
+		navs[i] = s.UnitNAV
+	}
+	return TrendSummaryFromValues(navs)
 }
 
 // Latest returns the last non-NaN value from a float64 slice, or NaN if none.

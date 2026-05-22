@@ -19,6 +19,21 @@ type DailySummary struct {
 	Note      string
 }
 
+type PriceSnapshot struct {
+	Kind       AssetKind
+	Market     string
+	Code       string
+	Date       string // YYYY-MM-DD
+	Open       float64
+	High       float64
+	Low        float64
+	Close      float64
+	Volume     float64
+	Amount     float64
+	ChangePct  float64
+	RecordedAt time.Time
+}
+
 // FundListEntry represents one fund from eastmoney fundcode_search.js
 type FundListEntry struct {
 	Code       string
