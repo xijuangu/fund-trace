@@ -554,7 +554,8 @@ func (m *Model) addFundView() string {
 			"",
 			m.textInput.View(),
 			"",
-			StatusStyle.Render("6-digit→fund | sh/sz+code→stock | stock:sh:code"),
+			StatusStyle.Render("Fund:  6-digit code, e.g. 011513"),
+			StatusStyle.Render("Stock: sh600519  /  sz000001  /  stock:sh:600519"),
 			StatusStyle.Render("[Enter] confirm  [Esc] cancel"),
 		),
 	))
