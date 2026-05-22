@@ -9,6 +9,103 @@ import (
 	"fund-trace/internal/model"
 )
 
+// RenderAssetTable renders a colored table of mixed fund and stock data.
+// navHistory is optional: if non-nil, the Trend column shows sparklines
+// using the historical NAV values for each fund. Stocks always show "—".
+func RenderAssetTable(rows []AssetRow, navHistory map[string][]float64, cursor int) string {
+	if len(rows) == 0 {
+		return LoadingStyle.Render("  Loading asset data...")
+	}
+
+	var sb strings.Builder
+
+	// Column widths (in terminal display columns, CJK-aware).
+	const (
+		typeW   = 6
+		mktW    = 4
+		codeW   = 8
+		nameW   = 18
+		valueW  = 10
+		changeW = 10
+		trendW  = 10
+	)
+
+	// ------ Header ------
+	sb.WriteString(HeaderStyle.Render(
+		padRight("Type", typeW) + "  " +
+			padRight("Mkt.", mktW) + "  " +
+			padRight("Code", codeW) + "  " +
+			padRight("Name", nameW) + "  " +
+			padRight("Price/NAV", valueW) + "  " +
+			padRight("Change%", changeW) + "  " +
+			padRight("Trend", trendW),
+	))
+	sb.WriteString("\n")
+
+	// Separator.
+	sepLen := typeW + mktW + codeW + nameW + valueW + changeW + trendW + 12
+	sb.WriteString(strings.Repeat("─", sepLen))
+	sb.WriteString("\n")
+
+	// ------ Rows ------
+	for i, r := range rows {
+		typeStr := "Fund"
+		mktStr := "—"
+		if r.Kind == model.AssetKindStock {
+			typeStr = "Stock"
+			mktStr = r.Market
+		}
+
+		name := truncateByWidth(r.Name, nameW)
+
+		var valueStr string
+		isAvailable := r.Available
+		if !isAvailable {
+			valueStr = "—"
+		} else if r.Kind == model.AssetKindStock {
+			valueStr = fmt.Sprintf("%.2f", r.Value)
+		} else {
+			valueStr = fmt.Sprintf("%.4f", r.Value)
+		}
+
+		changeStr := "—"
+		if isAvailable {
+			changeStr = RenderChange(r.ChangePct)
+		}
+
+		trendStr := "—"
+		if r.Kind == model.AssetKindFund && navHistory != nil {
+			if history, ok := navHistory[r.Code]; ok {
+				blocks := Sparkline(history, trendW)
+				var sb2 strings.Builder
+				for _, b := range blocks {
+					if b.Char == '▄' {
+						sb2.WriteString(ZeroStyle.Render(string(b.Char)))
+					} else {
+						sb2.WriteString(ColorizeChange(b.Value, string(b.Char)))
+					}
+				}
+				trendStr = sb2.String()
+			}
+		}
+
+		row := padRight(typeStr, typeW) + "  " +
+			padRight(mktStr, mktW) + "  " +
+			padRight(r.Code, codeW) + "  " +
+			padRight(name, nameW) + "  " +
+			padRight(valueStr, valueW) + "  " +
+			padRight(changeStr, changeW) + "  " +
+			padRight(trendStr, trendW)
+
+		if i == cursor {
+			row = "\033[7m" + row + "\033[0m"
+		}
+		sb.WriteString(row + "\n")
+	}
+
+	return sb.String()
+}
+
 // RenderFundTable renders a colored table of real-time fund data.
 // navHistory is optional: if non-nil, the Trend column shows sparklines
 // using the historical NAV values for each fund.

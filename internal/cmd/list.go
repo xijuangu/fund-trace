@@ -12,14 +12,10 @@ import (
 
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List all tracked funds with current real-time data",
+	Short: "List all tracked funds and stocks with current real-time data",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		codes := make([]string, len(cfg.Funds))
-		for i, f := range cfg.Funds {
-			codes[i] = f.Code
-		}
+		codes := cfg.FundCodes()
 		funds := fc.FetchAllRealTime(codes)
-
 		dbFunds, _ := st.ListFunds()
 		dbNames := make(map[string]string, len(dbFunds))
 		for _, f := range dbFunds {
@@ -46,6 +42,39 @@ var listCmd = &cobra.Command{
 			return rtFunds[i].Code < rtFunds[j].Code
 		})
 		fmt.Print(tui.RenderFundTable(rtFunds, nil, -1))
+		fmt.Println()
+
+		stockEntries := cfg.StockEntries()
+		if len(stockEntries) > 0 {
+			symbols := make([]string, len(stockEntries))
+			for i, e := range stockEntries {
+				symbols[i] = e.Market + e.Code
+			}
+			quotes, err := fc.FetchStockQuotes(symbols)
+			if err != nil {
+				fmt.Printf("Stocks: fetch error: %v\n", err)
+			} else {
+				fmt.Println("=== Stocks ===")
+				fmt.Printf("%-4s %-8s %-20s %10s %10s %10s %10s\n", "Mkt", "Code", "Name", "Price", "Prev", "Chg%", "Update")
+				fmt.Println("──────────────────────────────────────────────────────────────────────────")
+				sortedSym := make([]string, 0, len(quotes))
+				for s := range quotes {
+					sortedSym = append(sortedSym, s)
+				}
+				sort.Strings(sortedSym)
+				for _, sym := range sortedSym {
+					q := quotes[sym]
+					chg := fmt.Sprintf("%.2f%%", q.ChangePct)
+					if q.ChangePct > 0 {
+						chg = tui.PositiveStyle.Render(chg)
+					} else if q.ChangePct < 0 {
+						chg = tui.NegativeStyle.Render(chg)
+					}
+					fmt.Printf("%-4s %-8s %-20s %10.2f %10.2f %s %10s\n",
+						q.Market, q.Code, q.Name, q.Value, q.Previous, chg, q.UpdateTime)
+				}
+			}
+		}
 		return nil
 	},
 }

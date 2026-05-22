@@ -24,3 +24,4 @@ fund_cache.json
 
 # OpenCode
 .omo/
+.gocache/

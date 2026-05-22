@@ -42,16 +42,19 @@ type heartbeatMsg time.Time
 
 // dataFetchedMsg carries the combined results of one fetch cycle.
 type dataFetchedMsg struct {
-	funds      map[string]*model.RealTimeFund
-	navHistory map[string][]float64
-	err        error
+	funds       map[string]*model.RealTimeFund
+	stockQuotes map[string]*model.Quote
+	navHistory  map[string][]float64
+	err         error
 }
 
-// fundAddedMsg carries the result of adding a new fund via API.
-type fundAddedMsg struct {
-	code string
-	name string
-	err  error
+// assetAddedMsg carries the result of adding a new fund or stock.
+type assetAddedMsg struct {
+	kind   model.AssetKind
+	market string
+	code   string
+	name   string
+	err    error
 }
 
 // detailFetchedMsg carries historical data and trend analysis for a fund.
@@ -67,6 +70,26 @@ type detailFetchedMsg struct {
 type Config struct {
 	RefreshInterval time.Duration
 	FundCodes       []string
+	StockSymbols    []string
+}
+
+// StockEntry holds a stock market+code pair for display.
+type StockEntry struct {
+	Market string
+	Code   string
+}
+
+// AssetRow is a unified row for displaying either a fund or stock in the table.
+type AssetRow struct {
+	Kind       model.AssetKind
+	Market     string
+	Code       string
+	Name       string
+	Available  bool
+	Value      float64
+	Previous   float64
+	ChangePct  float64
+	UpdateTime string
 }
 
 // ---- Model ----
@@ -81,20 +104,23 @@ type Model struct {
 	appConfig  *config.Config
 	configPath string
 
-	fundList   []model.Fund
-	realtime   map[string]*model.RealTimeFund
-	navHistory map[string][]float64
+	assetList   []model.Asset
+	stockList   []model.Asset
+	stockSym    []string
+	realtime    map[string]*model.RealTimeFund
+	stockQuotes map[string]*model.Quote
+	navHistory  map[string][]float64
 
 	mode          mode
 	cursor        int
 	textInput     textinput.Model
-	confirmTarget *model.Fund
-	alertTarget   *model.Fund
+	confirmTarget *model.Asset
+	alertTarget   *model.Asset
 	alertIsRise   bool
 	settingsIdx        int
 	settingsEditing    bool
 	settingsEditInput  textinput.Model
-	detailFund         *model.Fund
+	detailAsset        *model.Asset
 	detailSnapshots    []model.NavSnapshot
 	detailTrend        analysis.TrendResult
 	detailLoading      bool
@@ -121,17 +147,26 @@ func NewDashboard(
 	fc *fetcher.Client,
 	nf *notifier.Notifier,
 	codes []string,
+	stocks []struct{ Market, Code string },
 	refreshInterval time.Duration,
 	appCfg *config.Config,
 	cfgPath string,
 ) *Model {
-	funds, err := st.ListFunds()
+	assets, err := st.ListAssets()
 	if err != nil {
-		slog.Error("failed to list funds, falling back to codes", "error", err)
-		funds = make([]model.Fund, len(codes))
-		for i, code := range codes {
-			funds[i] = model.Fund{Code: code}
+		slog.Error("failed to list assets, falling back to codes", "error", err)
+		assets = make([]model.Asset, 0, len(codes)+len(stocks))
+		for _, code := range codes {
+			assets = append(assets, model.Asset{Kind: model.AssetKindFund, Code: code})
 		}
+		for _, s := range stocks {
+			assets = append(assets, model.Asset{Kind: model.AssetKindStock, Market: s.Market, Code: s.Code})
+		}
+	}
+
+	stockSyms := make([]string, 0, len(stocks))
+	for _, s := range stocks {
+		stockSyms = append(stockSyms, s.Market+s.Code)
 	}
 
 	return &Model{
@@ -141,11 +176,14 @@ func NewDashboard(
 		config: Config{
 			RefreshInterval: refreshInterval,
 			FundCodes:       codes,
+			StockSymbols:    stockSyms,
 		},
 		appConfig:  appCfg,
 		configPath: cfgPath,
-		fundList:   funds,
+		assetList:  assets,
+		stockSym:   stockSyms,
 		realtime:   make(map[string]*model.RealTimeFund),
+		stockQuotes: make(map[string]*model.Quote),
 		navHistory: make(map[string][]float64),
 		loading:    true,
 		mode:       modeNormal,
@@ -189,14 +227,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.err = nil
 				m.realtime = msg.funds
+				m.stockQuotes = msg.stockQuotes
+				if m.stockQuotes == nil {
+					m.stockQuotes = make(map[string]*model.Quote)
+				}
 				m.navHistory = msg.navHistory
 				m.checkAlerts()
 			}
 		}
 		return m, nil
 
-	case fundAddedMsg:
-		return m.handleFundAdded(msg)
+	case assetAddedMsg:
+		return m.handleAssetAdded(msg)
 
 	case detailFetchedMsg:
 		return m.handleDetailFetched(msg)
@@ -226,8 +268,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "j", "down":
-		if len(m.fundList) > 0 {
-			m.cursor = min(m.cursor+1, len(m.fundList)-1)
+		if len(m.assetList) > 0 {
+			m.cursor = min(m.cursor+1, len(m.assetList)-1)
 		}
 	case "k", "up":
 		if m.cursor > 0 {
@@ -263,44 +305,37 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y":
-		code := m.confirmTarget.Code
-		m.store.RemoveFund(code)
-		m.config.FundCodes = removeFromSlice(m.config.FundCodes, code)
-		m.appConfig.Funds = removeFundEntry(m.appConfig.Funds, code)
+		target := m.confirmTarget
+		kind := target.Kind
+		market := target.Market
+		code := target.Code
+
+		if kind == model.AssetKindFund {
+			m.store.RemoveFund(code)
+			m.config.FundCodes = removeFromSlice(m.config.FundCodes, code)
+			m.appConfig.RemoveAsset("fund", "", code)
+		} else {
+			m.store.RemoveAsset(kind, market, code)
+			sym := market + code
+			m.config.StockSymbols = removeFromSlice(m.config.StockSymbols, sym)
+			m.appConfig.RemoveAsset("stock", market, code)
+		}
 		m.appConfig.Save(m.configPath)
-		for i, f := range m.fundList {
-			if f.Code == code {
-				m.fundList = append(m.fundList[:i], m.fundList[i+1:]...)
+		for i, a := range m.assetList {
+			if a.Code == code && a.Kind == kind && a.Market == market {
+				m.assetList = append(m.assetList[:i], m.assetList[i+1:]...)
 				break
 			}
 		}
 		m.mode = modeNormal
-		if m.cursor >= len(m.fundList) && len(m.fundList) > 0 {
-			m.cursor = len(m.fundList) - 1
+		if m.cursor >= len(m.assetList) && len(m.assetList) > 0 {
+			m.cursor = len(m.assetList) - 1
 		}
 		return m, m.fetchDataCmd()
 	case "n", "esc":
 		m.mode = modeNormal
 	}
 	return m, nil
-}
-
-func (m *Model) updateAddFund(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		m.mode = modeNormal
-		return m, nil
-	case "enter":
-		code := m.textInput.Value()
-		if len(code) != 6 {
-			return m, nil
-		}
-		return m, m.fetchAddFundCmd(code)
-	default:
-		var cmd tea.Cmd
-		m.textInput, cmd = m.textInput.Update(msg)
-		return m, cmd
-	}
 }
 
 func (m *Model) updateAlertSet(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -394,17 +429,29 @@ func (m *Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleFundAdded(msg fundAddedMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleAssetAdded(msg assetAddedMsg) (tea.Model, tea.Cmd) {
 	m.mode = modeNormal
 	if msg.err != nil {
 		m.err = msg.err
 		return m, nil
 	}
-	m.config.FundCodes = append(m.config.FundCodes, msg.code)
-	m.appConfig.Funds = append(m.appConfig.Funds, config.FundEntry{Code: msg.code})
+
+	if msg.kind == model.AssetKindFund {
+		m.config.FundCodes = append(m.config.FundCodes, msg.code)
+		m.appConfig.AddFund(msg.code)
+	} else {
+		sym := msg.market + msg.code
+		m.config.StockSymbols = append(m.config.StockSymbols, sym)
+		m.appConfig.AddStock(msg.market, msg.code)
+	}
 	m.appConfig.Save(m.configPath)
-	m.fundList = append(m.fundList, model.Fund{Code: msg.code, Name: msg.name})
-	m.cursor = len(m.fundList) - 1
+	m.assetList = append(m.assetList, model.Asset{
+		Kind:   msg.kind,
+		Market: msg.market,
+		Code:   msg.code,
+		Name:   msg.name,
+	})
+	m.cursor = len(m.assetList) - 1
 	return m, m.fetchDataCmd()
 }
 
@@ -462,10 +509,10 @@ func (m *Model) normalView() string {
 	}
 
 	if m.loading && len(m.realtime) == 0 {
-		sb.WriteString(LoadingStyle.Render("  Fetching fund data..."))
+		sb.WriteString(LoadingStyle.Render("  Fetching asset data..."))
 	} else {
-		rtFunds := m.resolveFundList()
-		sb.WriteString(RenderFundTable(rtFunds, m.navHistory, m.cursor))
+		rf := m.resolveAssetList()
+		sb.WriteString(RenderAssetTable(rf, m.navHistory, m.cursor))
 	}
 
 	sb.WriteString("\n")
@@ -503,11 +550,12 @@ func (m *Model) addFundView() string {
 	var sb strings.Builder
 	sb.WriteString(DialogStyle.Render(
 		lipgloss.JoinVertical(lipgloss.Left,
-			TitleStyle.Render("Add Fund"),
+			TitleStyle.Render("Add Asset"),
 			"",
 			m.textInput.View(),
 			"",
-			StatusStyle.Render("Enter 6-digit fund code, [Enter] to confirm"),
+			StatusStyle.Render("6-digit→fund | sh/sz+code→stock | stock:sh:code"),
+			StatusStyle.Render("[Enter] confirm  [Esc] cancel"),
 		),
 	))
 	return sb.String()
@@ -515,17 +563,26 @@ func (m *Model) addFundView() string {
 
 func (m *Model) confirmDeleteView() string {
 	name := ""
+	typeStr := "Asset"
 	if m.confirmTarget != nil {
-		name = m.confirmTarget.Name
-		if name == "" {
-			name = m.confirmTarget.Code
+		n := m.confirmTarget.Name
+		c := m.confirmTarget.Code
+		if n == "" {
+			n = c
 		} else {
-			name = fmt.Sprintf("%s (%s)", name, m.confirmTarget.Code)
+			n = fmt.Sprintf("%s (%s)", n, c)
+		}
+		if m.confirmTarget.Kind == model.AssetKindFund {
+			typeStr = "Fund"
+			name = n
+		} else {
+			typeStr = "Stock"
+			name = fmt.Sprintf("%s:%s — %s", m.confirmTarget.Market, m.confirmTarget.Code, n)
 		}
 	}
 	return DialogStyle.Render(
 		lipgloss.JoinVertical(lipgloss.Left,
-			TitleStyle.Render("Delete Fund"),
+			TitleStyle.Render("Delete "+typeStr),
 			"",
 			fmt.Sprintf("  Remove %s ?", name),
 			"",
@@ -584,9 +641,33 @@ func (m *Model) settingsView() string {
 func (m *Model) detailView() string {
 	var sb strings.Builder
 
-	header := TitleStyle.Render(fmt.Sprintf(" Fund Detail: %s ", m.detailFund.Code))
-	if m.detailFund.Name != "" {
-		header += "  " + StatusStyle.Render(m.detailFund.Name)
+	if m.detailAsset.Kind == model.AssetKindStock {
+		sym := m.detailAsset.Market + m.detailAsset.Code
+		header := TitleStyle.Render(fmt.Sprintf(" Stock Detail: %s ", sym))
+		sb.WriteString(header)
+		sb.WriteString("\n\n")
+
+		if q, ok := m.stockQuotes[sym]; ok && q != nil {
+			sb.WriteString(fmt.Sprintf("  Name:        %s\n", q.Name))
+			priceStr := fmt.Sprintf("%.2f", q.Value)
+			sb.WriteString(fmt.Sprintf("  Price:       %s\n", priceStr))
+			sb.WriteString(fmt.Sprintf("  Prev Close:  %.2f\n", q.Previous))
+			sb.WriteString(fmt.Sprintf("  Change:      %s\n", RenderChange(q.ChangePct)))
+			sb.WriteString(fmt.Sprintf("  Updated:     %s\n", q.UpdateTime))
+		} else {
+			sb.WriteString(fmt.Sprintf("  Code: %s\n", m.detailAsset.Code))
+			sb.WriteString("  No quote data available.\n")
+		}
+		sb.WriteString("\n")
+		sb.WriteString(StatusStyle.Render("历史分析暂未实现"))
+		sb.WriteString("\n\n")
+		sb.WriteString(StatusStyle.Render("[Esc] back to dashboard"))
+		return sb.String()
+	}
+
+	header := TitleStyle.Render(fmt.Sprintf(" Fund Detail: %s ", m.detailAsset.Code))
+	if m.detailAsset.Name != "" {
+		header += "  " + StatusStyle.Render(m.detailAsset.Name)
 	}
 	sb.WriteString(header)
 	sb.WriteString("\n\n")
@@ -654,12 +735,12 @@ func (m *Model) helpView() string {
 		lipgloss.JoinVertical(lipgloss.Left,
 			TitleStyle.Render("Help"),
 			"",
-			"  j/k or ↑/↓   Navigate fund rows",
-			"  a             Add new fund",
-			"  d             Delete selected fund",
-			"  A             Set alert for selected fund",
+			"  j/k or ↑/↓   Navigate asset rows",
+			"  a             Add fund or stock (6-digit → fund, sh/sz+code → stock)",
+			"  d             Delete selected asset",
+			"  A             Set alert (fund only)",
 			"  s             Open settings",
-			"  Enter         View fund detail & trend",
+			"  Enter         View detail (fund analysis / stock quote)",
 			"  r             Manual refresh",
 			"  h             Show this help",
 			"  q or Esc      Quit application",
@@ -686,26 +767,62 @@ func isNaN(f float64) bool {
 
 // ---- Internal helpers ----
 
-// resolveFundList builds an ordered slice of RealTimeFund matching m.fundList,
-// falling back to DB names when the API returns no name (e.g. QDII funds).
-func (m *Model) resolveFundList() []model.RealTimeFund {
-	var rtFunds []model.RealTimeFund
-	for _, f := range m.fundList {
-		if rt, ok := m.realtime[f.Code]; ok && rt != nil {
-			r := *rt
-			if r.Name == "" {
-				r.Name = f.Name
+// resolveAssetList builds an ordered slice of AssetRow matching m.assetList,
+// combining real-time fund data and stock quotes.
+func (m *Model) resolveAssetList() []AssetRow {
+	var rows []AssetRow
+	for _, a := range m.assetList {
+		switch a.Kind {
+		case model.AssetKindFund:
+			if rt, ok := m.realtime[a.Code]; ok && rt != nil {
+				name := rt.Name
+				if name == "" {
+					name = a.Name
+				}
+				rows = append(rows, AssetRow{
+					Kind:       model.AssetKindFund,
+					Code:       a.Code,
+					Name:       name,
+					Available:  rt.Available,
+					Value:      rt.EstimatedNAV,
+					Previous:   rt.PreviousNAV,
+					ChangePct:  rt.DailyChangePct,
+					UpdateTime: rt.UpdateTime,
+				})
+			} else {
+				rows = append(rows, AssetRow{
+					Kind:      model.AssetKindFund,
+					Code:      a.Code,
+					Name:      a.Name,
+					Available: false,
+				})
 			}
-			rtFunds = append(rtFunds, r)
-		} else {
-			rtFunds = append(rtFunds, model.RealTimeFund{
-				Code:      f.Code,
-				Name:      f.Name,
-				Available: false,
-			})
+		case model.AssetKindStock:
+			sym := a.Market + a.Code
+			if q, ok := m.stockQuotes[sym]; ok && q != nil {
+				rows = append(rows, AssetRow{
+					Kind:       model.AssetKindStock,
+					Market:     a.Market,
+					Code:       a.Code,
+					Name:       or(q.Name, a.Name),
+					Available:  q.Available,
+					Value:      q.Value,
+					Previous:   q.Previous,
+					ChangePct:  q.ChangePct,
+					UpdateTime: q.UpdateTime,
+				})
+			} else {
+				rows = append(rows, AssetRow{
+					Kind:      model.AssetKindStock,
+					Market:    a.Market,
+					Code:      a.Code,
+					Name:      a.Name,
+					Available: false,
+				})
+			}
 		}
 	}
-	return rtFunds
+	return rows
 }
 
 func (m *Model) buildStatusParts() []string {
@@ -743,10 +860,9 @@ func (m *Model) checkAlerts() {
 
 	triggered := m.notifier.CheckAlerts(rtFunds, alerts)
 	if len(triggered) > 0 {
-		// Build a name map from our fund list.
-		nameMap := make(map[string]string, len(m.fundList))
-		for _, f := range m.fundList {
-			nameMap[f.Code] = f.Name
+		nameMap := make(map[string]string, len(m.assetList))
+		for _, a := range m.assetList {
+			nameMap[a.Code] = a.Name
 		}
 		m.notifier.NotifyTriggered(triggered, nameMap)
 	}
@@ -772,10 +888,20 @@ func heartbeatCmd() tea.Cmd {
 	})
 }
 
-// fetchDataCmd fetches real-time fund data AND historical NAV data for sparklines.
+// fetchDataCmd fetches real-time fund data, stock quotes, AND historical NAV data for sparklines.
 func (m *Model) fetchDataCmd() tea.Cmd {
 	return func() tea.Msg {
 		funds := m.fetcher.FetchAllRealTime(m.config.FundCodes)
+
+		var stockQuotes map[string]*model.Quote
+		if len(m.config.StockSymbols) > 0 {
+			var err error
+			stockQuotes, err = m.fetcher.FetchStockQuotes(m.config.StockSymbols)
+			if err != nil {
+				slog.Warn("fetch stock quotes failed", "error", err)
+				stockQuotes = make(map[string]*model.Quote)
+			}
+		}
 
 		// Fetch nav history for sparklines (last 30 days, oldest→newest).
 		navHist := make(map[string][]float64)
@@ -796,8 +922,9 @@ func (m *Model) fetchDataCmd() tea.Cmd {
 		}
 
 		return dataFetchedMsg{
-			funds:      funds,
-			navHistory: navHist,
+			funds:       funds,
+			stockQuotes: stockQuotes,
+			navHistory:  navHist,
 		}
 	}
 }
@@ -807,25 +934,74 @@ func (m *Model) fetchDataCmd() tea.Cmd {
 func (m *Model) enterAddFund() (tea.Model, tea.Cmd) {
 	m.mode = modeAddFund
 	m.textInput = newTextInput()
+	m.textInput.Placeholder = "000000 or sh600519"
+	m.textInput.CharLimit = 20
+	m.textInput.Width = 30
 	m.textInput.Focus()
 	return m, nil
 }
 
+func (m *Model) updateAddFund(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.mode = modeNormal
+		return m, nil
+	case "enter":
+		input := strings.TrimSpace(m.textInput.Value())
+		if input == "" {
+			return m, nil
+		}
+
+		// Parse stock:sh:600519 format
+		if strings.HasPrefix(input, "stock:") {
+			parts := strings.SplitN(input[6:], ":", 2)
+			if len(parts) != 2 || len(parts[0]) != 2 || len(parts[1]) != 6 {
+				return m, nil
+			}
+			return m, m.fetchAddAssetCmd(model.AssetKindStock, parts[0], parts[1])
+		}
+
+		// Parse sh600519 or sz000001 format (market prefix + 6-digit code)
+		if len(input) == 8 {
+			prefix := input[:2]
+			code := input[2:]
+			if (prefix == "sh" || prefix == "sz") && len(code) == 6 && isAllDigits(code) {
+				return m, m.fetchAddAssetCmd(model.AssetKindStock, prefix, code)
+			}
+		}
+
+		// Pure 6-digit → fund
+		if len(input) == 6 && isAllDigits(input) {
+			return m, m.fetchAddAssetCmd(model.AssetKindFund, "", input)
+		}
+
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+}
+
 func (m *Model) enterConfirmDelete() (tea.Model, tea.Cmd) {
-	if len(m.fundList) == 0 {
+	if len(m.assetList) == 0 {
 		return m, nil
 	}
-	target := m.fundList[m.cursor]
+	target := m.assetList[m.cursor]
 	m.confirmTarget = &target
 	m.mode = modeConfirmDelete
 	return m, nil
 }
 
 func (m *Model) enterAlertSet() (tea.Model, tea.Cmd) {
-	if len(m.fundList) == 0 {
+	if len(m.assetList) == 0 {
 		return m, nil
 	}
-	target := m.fundList[m.cursor]
+	target := m.assetList[m.cursor]
+	if target.Kind == model.AssetKindStock {
+		m.err = fmt.Errorf("股票告警暂未实现")
+		return m, nil
+	}
 	m.alertTarget = &target
 	m.alertIsRise = false
 	m.mode = modeAlertSet
@@ -838,14 +1014,21 @@ func (m *Model) enterAlertSet() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) enterDetail() (tea.Model, tea.Cmd) {
-	if len(m.fundList) == 0 {
+	if len(m.assetList) == 0 {
 		return m, nil
 	}
-	target := m.fundList[m.cursor]
-	m.detailFund = &target
+	target := m.assetList[m.cursor]
+	m.detailAsset = &target
+	m.mode = modeDetail
+
+	if target.Kind == model.AssetKindStock {
+		m.detailLoading = false
+		m.detailSnapshots = nil
+		return m, nil
+	}
+
 	m.detailLoading = true
 	m.detailSnapshots = nil
-	m.mode = modeDetail
 	return m, m.fetchDetailCmd(target.Code)
 }
 
@@ -896,20 +1079,41 @@ func (m *Model) applySettingsValue(idx int, val int) {
 
 // ---- Fetch commands ----
 
-func (m *Model) fetchAddFundCmd(code string) tea.Cmd {
+func (m *Model) fetchAddAssetCmd(kind model.AssetKind, market, code string) tea.Cmd {
 	return func() tea.Msg {
-		nameMap, err := m.fetcher.BuildFundNameMap()
-		if err != nil {
-			return fundAddedMsg{code: code, err: err}
+		if kind == model.AssetKindFund {
+			nameMap, err := m.fetcher.BuildFundNameMap()
+			if err != nil {
+				return assetAddedMsg{kind: kind, code: code, err: err}
+			}
+			name, ok := nameMap[code]
+			if !ok {
+				return assetAddedMsg{kind: kind, code: code, err: fmt.Errorf("fund code %s not found", code)}
+			}
+			if err := m.store.AddFundWithName(code, name, model.FundUnknown); err != nil {
+				return assetAddedMsg{kind: kind, code: code, err: err}
+			}
+			if err := m.store.AddAssetSimple(model.AssetKindFund, "", code); err != nil {
+				return assetAddedMsg{kind: kind, code: code, err: err}
+			}
+			_ = m.store.UpdateFundName(code, name)
+			return assetAddedMsg{kind: kind, code: code, name: name}
 		}
-		name, ok := nameMap[code]
-		if !ok {
-			return fundAddedMsg{code: code, err: fmt.Errorf("fund code %s not found", code)}
+
+		// Stock: fetch quote to discover name, then add to store.
+		sym := market + code
+		quotes, err := m.fetcher.FetchStockQuotes([]string{sym})
+		name := ""
+		if err == nil && quotes[sym] != nil && quotes[sym].Name != "" {
+			name = quotes[sym].Name
 		}
-		if err := m.store.AddFundWithName(code, name, model.FundUnknown); err != nil {
-			return fundAddedMsg{code: code, err: err}
+		if err := m.store.AddAssetSimple(model.AssetKindStock, market, code); err != nil {
+			return assetAddedMsg{kind: kind, market: market, code: code, name: name, err: err}
 		}
-		return fundAddedMsg{code: code, name: name}
+		if name != "" {
+			_ = m.store.AddAssetWithName(model.AssetKindStock, market, code, name, 0)
+		}
+		return assetAddedMsg{kind: kind, market: market, code: code, name: name}
 	}
 }
 
@@ -947,16 +1151,6 @@ func parseFloatOrZero(s string) float64 {
 	return f
 }
 
-func removeFundEntry(entries []config.FundEntry, target string) []config.FundEntry {
-	var result []config.FundEntry
-	for _, e := range entries {
-		if e.Code != target {
-			result = append(result, e)
-		}
-	}
-	return result
-}
-
 func removeFromSlice(slice []string, target string) []string {
 	var result []string
 	for _, s := range slice {
@@ -965,6 +1159,22 @@ func removeFromSlice(slice []string, target string) []string {
 		}
 	}
 	return result
+}
+
+func or(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func isAllDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // Compile-time interface check.

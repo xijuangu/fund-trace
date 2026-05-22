@@ -8,6 +8,7 @@ import (
 
 	"fund-trace/internal/config"
 	"fund-trace/internal/fetcher"
+	"fund-trace/internal/model"
 	"fund-trace/internal/notifier"
 	"fund-trace/internal/store"
 	"fund-trace/internal/tui"
@@ -22,26 +23,24 @@ var (
 	st         *store.Store
 	fc         *fetcher.Client
 	nf         *notifier.Notifier
+
+	fundCodes []string
+	stocks    []struct{ Market, Code string }
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "fund-trace",
-	Short: "A high-performance Chinese mutual fund tracking CLI",
-	Long: `fund-trace fetches real-time valuations and historical NAV data
-for Chinese mutual funds from 天天基金 and 东方财富 APIs.
+	Short: "A high-performance Chinese fund & stock tracking CLI",
+	Long: `fund-trace fetches real-time valuations for Chinese mutual funds
+and A-share stocks from 天天基金, 东方财富, and 腾讯财经 APIs.
 
 Default behavior: launches an interactive TUI dashboard with auto-refresh.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		return loadDeps()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Default: launch TUI dashboard
-		codes := make([]string, len(cfg.Funds))
-		for i, f := range cfg.Funds {
-			codes[i] = f.Code
-		}
 		refresh := time.Duration(cfg.Settings.RefreshIntervalSec) * time.Second
-		dash := tui.NewDashboard(st, fc, nf, codes, refresh, cfg, configPath)
+		dash := tui.NewDashboard(st, fc, nf, fundCodes, stocks, refresh, cfg, configPath)
 		p := tea.NewProgram(dash, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("TUI error: %w", err)
@@ -60,6 +59,8 @@ func loadDeps() error {
 		return fmt.Errorf("validate config: %w", err)
 	}
 
+	fundCodes, stocks = cfg.AllAssetCodes()
+
 	st, err = store.Open("fund-trace.db")
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
@@ -67,17 +68,15 @@ func loadDeps() error {
 	if err := st.Migrate(); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	// Seed funds from config
-	codes := make([]string, len(cfg.Funds))
-	for i, f := range cfg.Funds {
-		codes[i] = f.Code
+
+	for _, code := range fundCodes {
+		_ = st.AddAssetSimple(model.AssetKindFund, "", code)
 	}
-	if err := st.SeedFromConfig(codes); err != nil {
-		slog.Warn("seed funds", "error", err)
+	for _, s := range stocks {
+		_ = st.AddAssetSimple(model.AssetKindStock, s.Market, s.Code)
 	}
 
 	fc = fetcher.New(cfg.Settings.MaxConcurrentRequests)
-	// Fill in missing fund names from the API (one-time startup cost).
 	fillMissingNames(st, fc)
 	nf = notifier.New(time.Duration(cfg.Settings.AlertCooldownMin) * time.Minute)
 	return nil
@@ -116,7 +115,7 @@ func fillMissingNames(st *store.Store, fc *fetcher.Client) {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "config.yaml", "path to config file")
-	rootCmd.AddCommand(listCmd, addCmd, removeCmd, historyCmd, alertCmd, exportCmd, monitorCmd)
+	rootCmd.AddCommand(listCmd, addCmd, removeCmd, historyCmd, alertCmd, exportCmd, monitorCmd, stockCmd)
 }
 
 func Execute() {

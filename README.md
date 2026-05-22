@@ -1,13 +1,19 @@
 # fund-trace
 
-中国公募基金实时跟踪终端工具。纯 Go 单二进制，SQLite 持久化，Bubble Tea TUI 交互仪表盘。下载即用，零外部依赖。
+中国公募基金 & A 股实时跟踪终端工具。纯 Go 单二进制，SQLite 持久化，Bubble Tea TUI 交互仪表盘。下载即用，零外部依赖。
 
 ## 特性
+
+**双资产支持**
+- 基金实时估值（天天基金）+ 历史净值（东方财富）
+- A 股实时行情（腾讯财经非正式接口），沪深市场自动识别
+- 统一 TUI 仪表盘混合展示基金与股票
 
 **TUI 交互操作**
 - 光标导航（j/k / ↑↓），选中行反显高亮
 - `a` 添加基金：输入 6 位代码，自动发现基金名称，立即生效并写入配置
-- `d` 删除基金：二次确认后移除，同步更新配置文件
+- `a` 添加股票：输入 `sh600519` 或 `sz000001` 格式，或 `stock:sh:600519`
+- `d` 删除资产：二次确认后移除，同步更新配置文件
 - `A` 设置涨跌告警：切换跌/涨类型，输入阈值百分比
 - `s` 打开设置面板：实时编辑刷新间隔、并发数等参数，Esc 保存到 config.yaml
 - `Enter` 查看基金详情：全屏展示 SMA/RSI 趋势分析 + 最近 10 天历史净值
@@ -16,7 +22,7 @@
 **数据获取**
 - 并发拉取天天基金实时估值，所有基金同时请求，1-2 秒内返回
 - 自动发现基金名称——只需 6 位代码，系统从东方财富 26400+ 基金数据库中匹配全称
-- 启动时自动补齐配置文件中缺失的基金名称
+- 腾讯财经批量股票行情，股票列表一次请求
 - 支持历史净值查询，默认 30 天，可自定义天数
 
 **Sparkline 趋势线**
@@ -27,7 +33,7 @@
 
 **持久化**
 - SQLite WAL 模式存储，崩溃安全
-- 四张表：`funds`、`nav_snapshots`、`alerts`、`daily_summary`
+- 五张表：`funds`、`assets`、`nav_snapshots`、`alerts`、`daily_summary`
 - 首次运行自动建库建表
 - TUI 增删操作自动写回 `config.yaml`，重启不丢失
 
@@ -41,58 +47,27 @@
 - 冷却机制，同一告警在冷却期内不重复推送
 
 **导出**
-- CSV / HTML 双格式，文件名自动带日期戳
+- CSV / HTML 双格式，含 Type/Market/Code/Name/PriceOrNAV/Previous/Change%/UpdateTime
+- 文件名自动带日期戳
 
 ## 快速开始
 
-从 [Releases](https://github.com/xijuangu/fund-trace/releases) 下载对应平台的二进制文件。
-
 ```bash
-# macOS / Linux
-chmod +x fund-trace-darwin-arm64
-./fund-trace-darwin-arm64
-
-# Windows（在 Windows Terminal 或 PowerShell 中运行）
-.\fund-trace-windows-amd64.exe
+go build -o fund-trace .
+./fund-trace
 ```
 
 首次运行时若没有 `config.yaml`，会自动生成一份包含 13 只默认基金的配置文件。`fund-trace.db` 也会同时创建在当前目录。
 
-## TUI 快捷键
-
-| 键 | 功能 |
-|---|---|
-| `j` `k` `↑` `↓` | 移动光标，选中行反显高亮 |
-| `a` | 添加基金（输代码 → 回车确认，自动发现名称） |
-| `d` | 删除选中基金（`y` 确认 / `n` 取消） |
-| `A` | 为选中基金设置告警（`t` 切换跌/涨，输阈值 → 回车） |
-| `s` | 设置面板（`j`/`k` 选字段，回车编辑，Esc 保存并退出） |
-| `Enter` | 查看选中基金详情：趋势分析 + 历史净值表 |
-| `h` | 帮助浮层（任意键关闭） |
-| `r` | 手动刷新数据 |
-| `q` `Esc` | 退出（弹窗模式下 Esc = 关闭弹窗） |
-
-## 命令参考
+## CLI 命令参考
 
 ### `fund-trace`（默认）
 
 启动全屏 TUI 交互仪表盘。
 
-```
- Fund Trace                           2026-05-22 10:30:00
-
- Code      Name                      NAV         Change %      Trend       
- ────────────────────────────────────────────────────────────────────────
- 001595    天弘中证银行ETF联接C      1.6450      +0.04%        ▄▄▄▂▂▄▄▄▃▃ 
- 008087    华夏中证5G通信主题ETF联…  3.1259      +2.77%        ▆▂▄▄▆▅▆▂▄▂ 
-
- Last update: 10:30:00 | Next refresh: 52s
- [j/k]nav  [Enter]detail  [a]dd  [d]el  [A]lert  [s]ettings  [h]elp  [r]efresh  [q]uit
-```
-
 ### `fund-trace list`
 
-表格形式列出所有基金的当前实时数据。
+表格形式列出所有基金和股票的当前实时数据。
 
 ```bash
 $ fund-trace list
@@ -107,6 +82,17 @@ $ fund-trace add 000001
 Added fund 000001: 华夏成长混合
 ```
 
+### `fund-trace add stock <code> [market]`
+
+添加 A 股股票。市场自动推断：6 开头 → sh，0/3 开头 → sz。也可显式指定。
+
+```bash
+$ fund-trace add stock 600519        # 自动推断 sh
+$ fund-trace add stock sh 600519     # 显式指定
+$ fund-trace add stock 000001        # 自动推断 sz
+$ fund-trace add stock 300750        # 自动推断 sz
+```
+
 ### `fund-trace remove <code>`
 
 移除基金。别名：`rm`。
@@ -116,28 +102,23 @@ $ fund-trace remove 000001
 Removed fund 000001
 ```
 
+### `fund-trace remove stock <code> [market]`
+
+移除股票。
+
+```bash
+$ fund-trace remove stock 600519
+```
+
 ### `fund-trace history <code> [--days N]`
 
-历史净值 + 技术分析。
+历史净值 + 技术分析（仅限基金）。
 
 ```bash
 $ fund-trace history 011513 --days 60
-
-=== History: 011513 (60 days) ===
-
-Date         NAV      Change%
-────────────────────────────────
-2026-05-20   1.3400   +1.52%
-2026-05-19   1.3200   -0.75%
-...
-
-=== Trend Analysis ===
-  Direction:   down
-  5-day change: -2.13%
-  SMA(5):      1.3250
-  SMA(20):     1.3800
-  RSI(14):     42.35 (neutral)
 ```
+
+> 股票历史暂未实现，调用会返回明确错误提示。
 
 ### `fund-trace alert set <code> --drop 3`
 
@@ -145,108 +126,82 @@ Date         NAV      Change%
 
 ```bash
 $ fund-trace alert set 011513 --drop 3
-Alert #1 set: 011513 will notify on 3.0% drop
 ```
 
 ### `fund-trace alert list`
 
 列出所有告警。
 
-```bash
-$ fund-trace alert list
-
-=== Configured Alerts ===
-
-ID  Code     Type   Threshold  Status
-──────────────────────────────────────────
-1   011513   drop    -3.0%     active
-```
-
 ### `fund-trace alert remove <id>`
 
-按 ID 移除告警。别名：`rm`。
-
-```bash
-$ fund-trace alert remove 1
-```
+按 ID 移除告警。
 
 ### `fund-trace export [--format csv|html]`
 
-导出实时数据。
+导出基金和股票实时数据。
 
 ```bash
-$ fund-trace export -f csv   # → fund-data-2026-05-22.csv
-$ fund-trace export -f html  # → fund-data-2026-05-22.html
+$ fund-trace export -f csv
+$ fund-trace export -f html
 ```
 
-### `fund-trace monitor`
-
-TUI 仪表盘的别名，支持缩写 `mon`。
+CSV 列：Type, Market, Code, Name, Price/NAV, Previous, Change%, UpdateTime
 
 ## 配置文件
 
-`config.yaml` 与二进制放在同一目录，或用 `-c` 指定路径。首次运行不存在时自动生成。
+支持两种格式，推荐使用新的 `assets:` 格式。旧 `funds:` 格式自动兼容。
+
+### 推荐格式（新）
+
+```yaml
+assets:
+  - kind: fund
+    code: "011513"
+  - kind: stock
+    market: sh
+    code: "600519"
+  - kind: stock
+    market: sz
+    code: "000001"
+
+settings:
+  refresh_interval_sec: 60
+  cache_ttl_min: 6
+  alert_cooldown_min: 30
+  max_concurrent_requests: 5
+```
+
+### 兼容格式（旧，自动迁移）
 
 ```yaml
 funds:
   - code: "011513"
   - code: "011925"
-
-settings:
-  refresh_interval_sec: 60   # TUI 刷新间隔（秒）
-  cache_ttl_min: 6            # API 缓存有效期（分钟）
-  alert_cooldown_min: 30      # 同一告警最小触发间隔（分钟）
-  max_concurrent_requests: 5  # 并发请求数上限
 ```
 
-TUI 中的增删操作会自动写回 `config.yaml`，无需手动编辑。
+TUI 中增删操作自动写回 `assets:` 格式，已保存的旧配置在下次保存时自动升级。
 
-## 文件位置
+## 股票市场推断规则
 
-| 文件 | 默认路径 | 用途 |
-|---|---|---|
-| `config.yaml` | `./config.yaml` | 基金列表与全局配置 |
-| `fund-trace.db` | `./fund-trace.db` | SQLite 数据库 |
-
-均在执行目录下生成。可通过 `-c` 指定自定义配置文件路径。
-
-## 构建
-
-```bash
-git clone https://github.com/xijuangu/fund-trace.git
-cd fund-trace
-go build -o fund-trace .
-```
-
-要求 Go 1.22+。纯 Go 实现，无需 CGO。交叉编译：
-
-```bash
-GOOS=linux  GOARCH=amd64 go build -o fund-trace-linux-amd64  .
-GOOS=windows GOARCH=amd64 go build -o fund-trace-windows.exe .
-```
-
-## 技术栈
-
-| 组件 | 库 |
-|---|---|
-| CLI | `spf13/cobra` |
-| TUI | `charmbracelet/bubbletea` + `bubbles/textinput` |
-| 样式 | `charmbracelet/lipgloss` |
-| SQLite | `modernc.org/sqlite`（纯 Go） |
-| 通知 | `gen2brain/beeep` |
-| 配置 | `gopkg.in/yaml.v3` |
+| 代码前缀 | 市场 | 说明 |
+|---------|------|------|
+| 6 | sh（上海） | 主板 |
+| 0 | sz（深圳） | 主板 |
+| 3 | sz（深圳） | 创业板 |
+| 4 | — | 北交所（暂未支持） |
+| 8 | — | 北交所（暂未支持） |
 
 ## 数据源
 
-无需 API Key。
-
 | 数据源 | 用途 |
 |---|---|
-| 天天基金 `fundgz.1234567.com.cn` | 实时估值 |
-| 东方财富 `api.fund.eastmoney.com` | 历史净值 |
-| 东方财富 `fund.eastmoney.com/js/fundcode_search.js` | 基金名称发现（26400+ 条） |
+| 天天基金 `fundgz.1234567.com.cn` | 基金实时估值 |
+| 东方财富 `api.fund.eastmoney.com` | 基金历史净值 |
+| 东方财富 `fund.eastmoney.com/js/fundcode_search.js` | 基金名称发现 |
+| 腾讯财经 `qt.gtimg.cn` | A 股实时行情 |
 
-> 天天基金自 2022 年起仅对指数型基金提供实时估值，QDII、混合型等基金实时估值不可用，系统会正确显示基金名称但净值列标记为 `—`。所有数据仅供个人参考，不构成投资建议。
+> ⚠️ 腾讯财经接口为公开非正式接口，仅用于个人行情查看，不保证长期稳定，不构成投资建议。
+> 天天基金自 2022 年起仅对指数型基金提供实时估值，QDII、混合型等基金实时估值不可用，系统会正确显示基金名称但净值列标记为 `—`。
 
 ## 项目结构
 
@@ -256,16 +211,28 @@ fund-trace/
 ├── go.mod / go.sum
 ├── config.yaml
 └── internal/
-    ├── model/       # Fund, RealTimeFund, NavSnapshot, Alert
-    ├── config/      # YAML 解析、校验、Save
-    ├── store/       # SQLite WAL, 4 表 CRUD
-    ├── fetcher/     # 并发 API 客户端, 信号量, 重试
+    ├── model/       # Asset, Quote, Fund, RealTimeFund, NavSnapshot, Alert
+    ├── config/      # YAML 解析、校验、Save（支持新旧格式）
+    ├── store/       # SQLite WAL，assets/funds 表 CRUD
+    ├── fetcher/     # 并发 API 客户端（天天基金/东方财富/腾讯财经）
     ├── analysis/    # SMA, EMA, RSI, TrendSummary
-    ├── notifier/    # 桌面通知, 冷却去重
-    ├── tui/         # Bubble Tea 仪表盘, Sparkline, 模态弹窗
+    ├── notifier/    # 桌面通知，冷却去重
+    ├── tui/         # Bubble Tea 仪表盘，Sparkline，模态弹窗
     └── cmd/         # Cobra 命令行定义
 ```
 
-## 许可
+## 构建
 
-MIT
+```bash
+go build -o fund-trace .
+```
+
+要求 Go 1.22+。纯 Go 实现，无需 CGO。
+
+## 已知限制
+
+- 股票详情页历史分析暂未实现，详情页仅显示当前行情
+- 股票告警暂未支持，选中股票时设置告警给出明确提示
+- 北交所股票（代码 4/8 开头）暂未支持
+- 港股、美股暂未支持
+- 腾讯财经接口不保证长期稳定

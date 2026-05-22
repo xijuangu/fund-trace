@@ -20,32 +20,30 @@ var historyCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		code := args[0]
 		if len(code) != 6 {
-			return fmt.Errorf("invalid fund code %q: must be 6 digits", code)
+			return fmt.Errorf("invalid code %q: must be 6 digits", code)
 		}
-		// Try store first, then fetch from API
+		if isStockCode(code) {
+			return fmt.Errorf("stock history is not yet implemented for %s", code)
+		}
+
 		snapshots, err := st.GetNavHistory(code, historyDays)
 		if err != nil || len(snapshots) == 0 {
-			// Fetch fresh from API
 			snapshots, err = fc.FetchHistory(code, historyDays)
 			if err != nil {
 				return fmt.Errorf("fetch history for %s: %w", code, err)
 			}
-			// Save to store (best effort)
 			_ = st.SaveNavSnapshots(snapshots)
 		}
 		if len(snapshots) == 0 {
 			return fmt.Errorf("no history data for fund %s", code)
 		}
 
-		// Reverse to chronological order for analysis
 		sort.Slice(snapshots, func(i, j int) bool {
 			return snapshots[i].Date < snapshots[j].Date
 		})
 
-		// Compute trends
 		tr := analysis.TrendSummary(snapshots)
 
-		// Display recent snapshots (most recent first)
 		recent := snapshots
 		if len(recent) > 10 {
 			recent = recent[len(recent)-10:]
@@ -67,7 +65,6 @@ var historyCmd = &cobra.Command{
 			fmt.Printf("%-12s %10.4f %s\n", s.Date, s.UnitNAV, changeStr)
 		}
 
-		// Trend analysis
 		fmt.Println("\n=== Trend Analysis ===")
 		fmt.Printf("  Direction:   %s\n", tr.Direction)
 		fmt.Printf("  5-day change: %+.2f%%\n", tr.Change5D)
@@ -93,4 +90,11 @@ var historyCmd = &cobra.Command{
 
 func init() {
 	historyCmd.Flags().IntVar(&historyDays, "days", 30, "number of days of history to fetch")
+}
+
+func isStockCode(code string) bool {
+	if len(code) != 6 {
+		return false
+	}
+	return code[0] == '0' || code[0] == '3' || code[0] == '6'
 }
