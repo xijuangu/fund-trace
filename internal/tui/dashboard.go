@@ -20,6 +20,9 @@ import (
 // tickMsg is sent by the auto-refresh ticker on every interval.
 type tickMsg time.Time
 
+// heartbeatMsg is sent every second to keep the status bar countdown live.
+type heartbeatMsg time.Time
+
 // dataFetchedMsg carries the combined results of one fetch cycle.
 type dataFetchedMsg struct {
 	funds      map[string]*model.RealTimeFund
@@ -95,6 +98,7 @@ func (m *Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.fetchDataCmd(),
 		tickCmd(m.config.RefreshInterval),
+		heartbeatCmd(),
 	)
 }
 
@@ -121,6 +125,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			tickCmd(m.config.RefreshInterval),
 			m.fetchDataCmd(),
 		)
+
+	case heartbeatMsg:
+		return m, heartbeatCmd()
 
 	case dataFetchedMsg:
 		m.lastFetch = time.Now()
@@ -255,6 +262,15 @@ func (m *Model) checkAlerts() {
 func tickCmd(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(t time.Time) tea.Msg {
 		return tickMsg(t)
+	})
+}
+
+// heartbeatCmd returns a command that fires every second.
+// Unlike tickCmd, this only triggers a View re-render (no data fetch)
+// so the countdown in the status bar updates in real time.
+func heartbeatCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return heartbeatMsg(t)
 	})
 }
 
