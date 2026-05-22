@@ -10,8 +10,9 @@ funds:
     - code: "001595"
     - code: "016068"
     - code: "021492"
-    - code: "562500"
     - code: "024913"
+    - code: "562500"
+    - code: "012062"
 settings:
     refresh_interval_sec: 60
     cache_ttl_min: 6

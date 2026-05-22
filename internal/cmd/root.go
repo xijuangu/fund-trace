@@ -77,8 +77,41 @@ func loadDeps() error {
 	}
 
 	fc = fetcher.New(cfg.Settings.MaxConcurrentRequests)
+	// Fill in missing fund names from the API (one-time startup cost).
+	fillMissingNames(st, fc)
 	nf = notifier.New(time.Duration(cfg.Settings.AlertCooldownMin) * time.Minute)
 	return nil
+}
+
+func fillMissingNames(st *store.Store, fc *fetcher.Client) {
+	funds, err := st.ListFunds()
+	if err != nil {
+		return
+	}
+	missing := false
+	for _, f := range funds {
+		if f.Name == "" {
+			missing = true
+			break
+		}
+	}
+	if !missing {
+		return
+	}
+	nameMap, err := fc.BuildFundNameMap()
+	if err != nil {
+		slog.Warn("fill names: failed to fetch fund list", "error", err)
+		return
+	}
+	for _, f := range funds {
+		if f.Name == "" {
+			if name, ok := nameMap[f.Code]; ok {
+				if err := st.UpdateFundName(f.Code, name); err != nil {
+					slog.Warn("fill names: update failed", "code", f.Code, "error", err)
+				}
+			}
+		}
+	}
 }
 
 func init() {
