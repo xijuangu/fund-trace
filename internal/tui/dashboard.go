@@ -778,9 +778,11 @@ func (m *Model) fetchDataCmd() tea.Cmd {
 				continue
 			}
 			// Nav history comes back descending by date; reverse to oldest→newest.
+			// Use daily change % for sparklines so each block directly represents
+			// the day's gain/loss magnitude.
 			values := make([]float64, len(snaps))
 			for i, snap := range snaps {
-				values[len(snaps)-1-i] = snap.UnitNAV
+				values[len(snaps)-1-i] = snap.DailyGrowthPct
 			}
 			navHist[code] = values
 		}
