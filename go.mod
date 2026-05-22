@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/gen2brain/beeep v0.0.0-20240516210008-9c006672e7f4
 	github.com/spf13/cobra v1.9.1
+	golang.org/x/text v0.3.8
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.34.4
 )
@@ -39,7 +40,6 @@ require (
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
 	golang.org/x/sync v0.9.0 // indirect
 	golang.org/x/sys v0.27.0 // indirect
-	golang.org/x/text v0.3.8 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.55.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect

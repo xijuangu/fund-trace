@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"fund-trace/internal/model"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 // Tencent 财经行情接口:
@@ -41,10 +43,17 @@ func (c *Client) FetchStockQuotes(symbols []string) (map[string]*model.Quote, er
 		return nil, fmt.Errorf("stock quote read: %w", err)
 	}
 
+	dec := simplifiedchinese.GBK.NewDecoder()
+	utf8Body, err := dec.Bytes(body)
+	if err != nil {
+		utf8Body = body
+	}
+	raw := string(utf8Body)
+
 	now := time.Now()
 	result := make(map[string]*model.Quote)
 	for _, sym := range symbols {
-		q := ParseTencentQuote(string(body), sym, now)
+		q := ParseTencentQuote(raw, sym, now)
 		result[sym] = q
 	}
 	return result, nil
