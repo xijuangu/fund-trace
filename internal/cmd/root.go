@@ -61,7 +61,7 @@ func loadDeps() error {
 
 	fundCodes, stocks = cfg.AllAssetCodes()
 
-	st, err = store.Open("fund-trace.db")
+	st, err = store.Open(config.ResolveDBPath(configPath, cfg.Settings.DBPath))
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
 	}

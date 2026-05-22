@@ -170,7 +170,10 @@ settings:
   cache_ttl_min: 6
   alert_cooldown_min: 30
   max_concurrent_requests: 5
+  db_path: fund-trace.db
 ```
+
+`db_path` 可选。不配置时，数据库默认创建在配置文件同目录下：默认 `config.yaml` 对应 `./fund-trace.db`；使用 `--config /path/to/config.yaml` 时对应 `/path/to/fund-trace.db`。如果配置了相对路径，也会按配置文件所在目录解析；绝对路径则直接使用。
 
 ### 兼容格式（旧，自动迁移）
 

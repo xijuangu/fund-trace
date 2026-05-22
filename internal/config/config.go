@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"fund-trace/internal/model"
 
@@ -34,10 +35,11 @@ type AssetEntry struct {
 }
 
 type Settings struct {
-	RefreshIntervalSec    int `yaml:"refresh_interval_sec"`
-	CacheTTLMin           int `yaml:"cache_ttl_min"`
-	AlertCooldownMin      int `yaml:"alert_cooldown_min"`
-	MaxConcurrentRequests int `yaml:"max_concurrent_requests"`
+	RefreshIntervalSec    int    `yaml:"refresh_interval_sec"`
+	CacheTTLMin           int    `yaml:"cache_ttl_min"`
+	AlertCooldownMin      int    `yaml:"alert_cooldown_min"`
+	MaxConcurrentRequests int    `yaml:"max_concurrent_requests"`
+	DBPath                string `yaml:"db_path,omitempty"`
 }
 
 // FundCodes extracts fund codes from the configuration.
@@ -287,4 +289,21 @@ func DefaultSettings() Settings {
 		AlertCooldownMin:      30,
 		MaxConcurrentRequests: 5,
 	}
+}
+
+func ResolveDBPath(configPath, dbPath string) string {
+	configDir := filepath.Dir(configPath)
+	if configDir == "." {
+		configDir = ""
+	}
+	if dbPath != "" {
+		if filepath.IsAbs(dbPath) || configDir == "" {
+			return filepath.Clean(dbPath)
+		}
+		return filepath.Join(configDir, dbPath)
+	}
+	if configDir == "" {
+		return "fund-trace.db"
+	}
+	return filepath.Join(configDir, "fund-trace.db")
 }

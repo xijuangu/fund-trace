@@ -178,7 +178,7 @@ func TestValidate_StockWithInvalidMarket(t *testing.T) {
 func TestValidate_StockWithAutoInferMarket(t *testing.T) {
 	// 600xxx → sh
 	cfg := &Config{
-		Assets: []AssetEntry{{Kind: "stock", Code: "600519"}},
+		Assets:   []AssetEntry{{Kind: "stock", Code: "600519"}},
 		Settings: Settings{RefreshIntervalSec: 60},
 	}
 	err := cfg.Validate()
@@ -221,6 +221,36 @@ func TestDefaultSettings(t *testing.T) {
 	s := DefaultSettings()
 	if s.RefreshIntervalSec != 60 {
 		t.Errorf("expected 60, got %d", s.RefreshIntervalSec)
+	}
+}
+
+func TestResolveDBPath_DefaultConfigUsesCurrentDirectory(t *testing.T) {
+	got := ResolveDBPath("config.yaml", "")
+	if got != "fund-trace.db" {
+		t.Fatalf("expected fund-trace.db, got %s", got)
+	}
+}
+
+func TestResolveDBPath_CustomConfigUsesConfigDirectory(t *testing.T) {
+	got := ResolveDBPath(filepath.Join("/tmp", "fund-trace-review", "config.yaml"), "")
+	want := filepath.Join("/tmp", "fund-trace-review", "fund-trace.db")
+	if got != want {
+		t.Fatalf("expected %s, got %s", want, got)
+	}
+}
+
+func TestResolveDBPath_ExplicitRelativePathUsesConfigDirectory(t *testing.T) {
+	got := ResolveDBPath(filepath.Join("/tmp", "fund-trace-review", "config.yaml"), "data/app.db")
+	want := filepath.Join("/tmp", "fund-trace-review", "data", "app.db")
+	if got != want {
+		t.Fatalf("expected %s, got %s", want, got)
+	}
+}
+
+func TestResolveDBPath_ExplicitAbsolutePathWins(t *testing.T) {
+	got := ResolveDBPath(filepath.Join("/tmp", "fund-trace-review", "config.yaml"), "/var/tmp/custom.db")
+	if got != "/var/tmp/custom.db" {
+		t.Fatalf("expected explicit absolute path, got %s", got)
 	}
 }
 
