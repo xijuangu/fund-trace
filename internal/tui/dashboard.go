@@ -266,6 +266,8 @@ func (m *Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		code := m.confirmTarget.Code
 		m.store.RemoveFund(code)
 		m.config.FundCodes = removeFromSlice(m.config.FundCodes, code)
+		m.appConfig.Funds = removeFundEntry(m.appConfig.Funds, code)
+		m.appConfig.Save(m.configPath)
 		for i, f := range m.fundList {
 			if f.Code == code {
 				m.fundList = append(m.fundList[:i], m.fundList[i+1:]...)
@@ -400,6 +402,7 @@ func (m *Model) handleFundAdded(msg fundAddedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.config.FundCodes = append(m.config.FundCodes, msg.code)
 	m.appConfig.Funds = append(m.appConfig.Funds, config.FundEntry{Code: msg.code})
+	m.appConfig.Save(m.configPath)
 	m.fundList = append(m.fundList, model.Fund{Code: msg.code, Name: msg.name})
 	m.cursor = len(m.fundList) - 1
 	return m, m.fetchDataCmd()
@@ -938,6 +941,16 @@ func parseFloatOrZero(s string) float64 {
 	var f float64
 	fmt.Sscanf(s, "%f", &f)
 	return f
+}
+
+func removeFundEntry(entries []config.FundEntry, target string) []config.FundEntry {
+	var result []config.FundEntry
+	for _, e := range entries {
+		if e.Code != target {
+			result = append(result, e)
+		}
+	}
+	return result
 }
 
 func removeFromSlice(slice []string, target string) []string {
