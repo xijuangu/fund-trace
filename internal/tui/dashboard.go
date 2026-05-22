@@ -165,27 +165,17 @@ func (m *Model) Init() tea.Cmd {
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c", "esc":
-			m.quitting = true
-			return m, tea.Quit
-		case "r":
-			m.loading = true
-			return m, m.fetchDataCmd()
-		}
-
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
 
 	case tickMsg:
-		m.loading = true
-		return m, tea.Batch(
-			tickCmd(m.config.RefreshInterval),
-			m.fetchDataCmd(),
-		)
+		if m.mode == modeNormal {
+			m.loading = true
+			return m, tea.Batch(tickCmd(m.config.RefreshInterval), m.fetchDataCmd())
+		}
+		return m, nil
 
 	case heartbeatMsg:
 		return m, heartbeatCmd()
@@ -193,17 +183,236 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dataFetchedMsg:
 		m.lastFetch = time.Now()
 		m.loading = false
-		if msg.err != nil {
-			m.err = msg.err
-		} else {
-			m.err = nil
-			m.realtime = msg.funds
-			m.navHistory = msg.navHistory
-			m.checkAlerts()
+		if m.mode == modeNormal {
+			if msg.err != nil {
+				m.err = msg.err
+			} else {
+				m.err = nil
+				m.realtime = msg.funds
+				m.navHistory = msg.navHistory
+				m.checkAlerts()
+			}
 		}
 		return m, nil
+
+	case fundAddedMsg:
+		return m.handleFundAdded(msg)
+
+	case detailFetchedMsg:
+		return m.handleDetailFetched(msg)
+
+	case tea.KeyMsg:
+		switch m.mode {
+		case modeNormal:
+			return m.updateNormal(msg)
+		case modeConfirmDelete:
+			return m.updateConfirmDelete(msg)
+		case modeAddFund:
+			return m.updateAddFund(msg)
+		case modeAlertSet:
+			return m.updateAlertSet(msg)
+		case modeSettings:
+			return m.updateSettings(msg)
+		case modeDetail:
+			return m.updateDetail(msg)
+		case modeHelp:
+			return m.updateHelp(msg)
+		}
 	}
 
+	return m, nil
+}
+
+func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		if len(m.fundList) > 0 {
+			m.cursor = min(m.cursor+1, len(m.fundList)-1)
+		}
+	case "k", "up":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "q", "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+	case "esc":
+		m.quitting = true
+		return m, tea.Quit
+	case "r":
+		m.loading = true
+		return m, m.fetchDataCmd()
+	case "a":
+		return m.enterAddFund()
+	case "d":
+		return m.enterConfirmDelete()
+	case "A", "shift+a":
+		return m.enterAlertSet()
+	case "s":
+		m.mode = modeSettings
+		m.settingsIdx = 0
+		m.settingsEditing = false
+	case "enter":
+		return m.enterDetail()
+	case "h":
+		m.mode = modeHelp
+	}
+	return m, nil
+}
+
+func (m *Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y":
+		code := m.confirmTarget.Code
+		m.store.RemoveFund(code)
+		m.config.FundCodes = removeFromSlice(m.config.FundCodes, code)
+		for i, f := range m.fundList {
+			if f.Code == code {
+				m.fundList = append(m.fundList[:i], m.fundList[i+1:]...)
+				break
+			}
+		}
+		m.mode = modeNormal
+		if m.cursor >= len(m.fundList) && len(m.fundList) > 0 {
+			m.cursor = len(m.fundList) - 1
+		}
+		return m, m.fetchDataCmd()
+	case "n", "esc":
+		m.mode = modeNormal
+	}
+	return m, nil
+}
+
+func (m *Model) updateAddFund(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.mode = modeNormal
+		return m, nil
+	case "enter":
+		code := m.textInput.Value()
+		if len(code) != 6 {
+			return m, nil
+		}
+		return m, m.fetchAddFundCmd(code)
+	default:
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m *Model) updateAlertSet(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "t":
+		m.alertIsRise = !m.alertIsRise
+		return m, nil
+	case "esc":
+		m.mode = modeNormal
+		return m, nil
+	case "enter":
+		val := parseFloatOrZero(m.textInput.Value())
+		if val == 0 {
+			return m, nil
+		}
+		at := model.AlertDrop
+		threshold := -val
+		if m.alertIsRise {
+			at = model.AlertRise
+			threshold = val
+		}
+		m.store.UpsertAlert(model.Alert{
+			FundCode:     m.alertTarget.Code,
+			Type:         at,
+			ThresholdPct: threshold,
+			Enabled:      true,
+		})
+		m.mode = modeNormal
+		return m, nil
+	default:
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m *Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		if !m.settingsEditing {
+			m.settingsIdx = min(m.settingsIdx+1, 3)
+		}
+	case "k", "up":
+		if !m.settingsEditing {
+			m.settingsIdx = max(m.settingsIdx-1, 0)
+		}
+	case "enter":
+		if !m.settingsEditing {
+			m.settingsEditing = true
+			ti := newTextInput()
+			ti.Width = 10
+			ti.CharLimit = 6
+			ti.SetValue(m.settingsFieldValue(m.settingsIdx))
+			ti.Focus()
+			m.settingsEditInput = ti
+		}
+	case "esc":
+		if m.settingsEditing {
+			m.settingsEditing = false
+		} else {
+			m.appConfig.Save(m.configPath)
+			m.mode = modeNormal
+		}
+	default:
+		if m.settingsEditing {
+			switch msg.String() {
+			case "enter":
+				val := parseFloatOrZero(m.settingsEditInput.Value())
+				m.applySettingsValue(m.settingsIdx, int(val))
+				m.settingsEditing = false
+			default:
+				var cmd tea.Cmd
+				m.settingsEditInput, cmd = m.settingsEditInput.Update(msg)
+				return m, cmd
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.mode = modeNormal
+	}
+	return m, nil
+}
+
+func (m *Model) updateHelp(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.mode = modeNormal
+	return m, nil
+}
+
+func (m *Model) handleFundAdded(msg fundAddedMsg) (tea.Model, tea.Cmd) {
+	m.mode = modeNormal
+	if msg.err != nil {
+		m.err = msg.err
+		return m, nil
+	}
+	m.config.FundCodes = append(m.config.FundCodes, msg.code)
+	m.appConfig.Funds = append(m.appConfig.Funds, config.FundEntry{Code: msg.code})
+	m.fundList = append(m.fundList, model.Fund{Code: msg.code, Name: msg.name})
+	m.cursor = len(m.fundList) - 1
+	return m, m.fetchDataCmd()
+}
+
+func (m *Model) handleDetailFetched(msg detailFetchedMsg) (tea.Model, tea.Cmd) {
+	m.detailLoading = false
+	if msg.err != nil {
+		m.err = msg.err
+		return m, nil
+	}
+	m.detailSnapshots = msg.snapshots
+	m.detailTrend = msg.trend
 	return m, nil
 }
 
@@ -360,6 +569,161 @@ func (m *Model) fetchDataCmd() tea.Cmd {
 			navHistory: navHist,
 		}
 	}
+}
+
+// ---- Modal entry helpers ----
+
+func (m *Model) enterAddFund() (tea.Model, tea.Cmd) {
+	m.mode = modeAddFund
+	m.textInput = newTextInput()
+	m.textInput.Focus()
+	return m, nil
+}
+
+func (m *Model) enterConfirmDelete() (tea.Model, tea.Cmd) {
+	if len(m.fundList) == 0 {
+		return m, nil
+	}
+	target := m.fundList[m.cursor]
+	m.confirmTarget = &target
+	m.mode = modeConfirmDelete
+	return m, nil
+}
+
+func (m *Model) enterAlertSet() (tea.Model, tea.Cmd) {
+	if len(m.fundList) == 0 {
+		return m, nil
+	}
+	target := m.fundList[m.cursor]
+	m.alertTarget = &target
+	m.alertIsRise = false
+	m.mode = modeAlertSet
+	m.textInput = newTextInput()
+	m.textInput.Placeholder = "e.g. 3.0"
+	m.textInput.CharLimit = 10
+	m.textInput.Width = 20
+	m.textInput.Focus()
+	return m, nil
+}
+
+func (m *Model) enterDetail() (tea.Model, tea.Cmd) {
+	if len(m.fundList) == 0 {
+		return m, nil
+	}
+	target := m.fundList[m.cursor]
+	m.detailFund = &target
+	m.detailLoading = true
+	m.detailSnapshots = nil
+	m.mode = modeDetail
+	return m, m.fetchDetailCmd(target.Code)
+}
+
+// ---- Settings helpers ----
+
+func (m *Model) settingsFieldLabel(idx int) string {
+	switch idx {
+	case 0:
+		return "Refresh Interval (sec)"
+	case 1:
+		return "Cache TTL (min)"
+	case 2:
+		return "Alert Cooldown (min)"
+	case 3:
+		return "Max Concurrent Requests"
+	default:
+		return ""
+	}
+}
+
+func (m *Model) settingsFieldValue(idx int) string {
+	switch idx {
+	case 0:
+		return fmt.Sprintf("%d", m.appConfig.Settings.RefreshIntervalSec)
+	case 1:
+		return fmt.Sprintf("%d", m.appConfig.Settings.CacheTTLMin)
+	case 2:
+		return fmt.Sprintf("%d", m.appConfig.Settings.AlertCooldownMin)
+	case 3:
+		return fmt.Sprintf("%d", m.appConfig.Settings.MaxConcurrentRequests)
+	default:
+		return ""
+	}
+}
+
+func (m *Model) applySettingsValue(idx int, val int) {
+	switch idx {
+	case 0:
+		m.appConfig.Settings.RefreshIntervalSec = val
+	case 1:
+		m.appConfig.Settings.CacheTTLMin = val
+	case 2:
+		m.appConfig.Settings.AlertCooldownMin = val
+	case 3:
+		m.appConfig.Settings.MaxConcurrentRequests = val
+	}
+}
+
+// ---- Fetch commands ----
+
+func (m *Model) fetchAddFundCmd(code string) tea.Cmd {
+	return func() tea.Msg {
+		nameMap, err := m.fetcher.BuildFundNameMap()
+		if err != nil {
+			return fundAddedMsg{code: code, err: err}
+		}
+		name, ok := nameMap[code]
+		if !ok {
+			return fundAddedMsg{code: code, err: fmt.Errorf("fund code %s not found", code)}
+		}
+		if err := m.store.AddFundWithName(code, name, model.FundUnknown); err != nil {
+			return fundAddedMsg{code: code, err: err}
+		}
+		return fundAddedMsg{code: code, name: name}
+	}
+}
+
+func (m *Model) fetchDetailCmd(code string) tea.Cmd {
+	return func() tea.Msg {
+		snaps, err := m.store.GetNavHistory(code, 60)
+		if err != nil {
+			return detailFetchedMsg{err: err}
+		}
+		if len(snaps) < 5 {
+			fetched, ferr := m.fetcher.FetchHistory(code, 60)
+			if ferr != nil {
+				return detailFetchedMsg{err: ferr}
+			}
+			_ = m.store.SaveNavSnapshots(fetched)
+			snaps = fetched
+		}
+		if len(snaps) == 0 {
+			return detailFetchedMsg{err: fmt.Errorf("no history for %s", code)}
+		}
+		var chrono []model.NavSnapshot
+		for i := len(snaps) - 1; i >= 0; i-- {
+			chrono = append(chrono, snaps[i])
+		}
+		trend := analysis.TrendSummary(chrono)
+		return detailFetchedMsg{snapshots: chrono, trend: trend}
+	}
+}
+
+// ---- Utility helpers ----
+
+func parseFloatOrZero(s string) float64 {
+	var f float64
+	fmt.Sscanf(s, "%f", &f)
+	return f
+}
+
+func removeFromSlice(slice []string, target string) []string {
+	var result []string
+	for _, s := range slice {
+		if s != target {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 // Compile-time interface check.
