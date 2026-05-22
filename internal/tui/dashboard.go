@@ -60,6 +60,10 @@ type assetAddedMsg struct {
 
 // detailFetchedMsg carries historical data and trend analysis for a fund or stock.
 type detailFetchedMsg struct {
+	kind           model.AssetKind
+	market         string
+	code           string
+	quote          *model.Quote
 	snapshots      []model.NavSnapshot
 	priceSnapshots []model.PriceSnapshot
 	trend          analysis.TrendResult
@@ -216,7 +220,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loading = true
 			return m, tea.Batch(tickCmd(m.config.RefreshInterval), m.fetchDataCmd())
 		}
-		return m, nil
+		return m, tickCmd(m.config.RefreshInterval)
 
 	case heartbeatMsg:
 		return m, heartbeatCmd()
@@ -470,7 +474,16 @@ func (m *Model) handleAssetAdded(msg assetAddedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleDetailFetched(msg detailFetchedMsg) (tea.Model, tea.Cmd) {
+	if m.detailAsset != nil && (m.detailAsset.Kind != msg.kind || m.detailAsset.Market != msg.market || m.detailAsset.Code != msg.code) {
+		return m, nil
+	}
 	m.detailLoading = false
+	if msg.quote != nil {
+		if m.stockQuotes == nil {
+			m.stockQuotes = make(map[string]*model.Quote)
+		}
+		m.stockQuotes[msg.market+msg.code] = msg.quote
+	}
 	if msg.err != nil {
 		m.err = msg.err
 		return m, nil
@@ -897,9 +910,10 @@ func (m *Model) buildStatusParts() []string {
 	parts = append(parts, fmt.Sprintf("Last update: %s", m.lastFetch.Format("15:04:05")))
 
 	remaining := m.config.RefreshInterval - time.Since(m.lastFetch)
-	if remaining > 0 {
-		parts = append(parts, fmt.Sprintf("Next refresh: %.0fs", remaining.Seconds()))
+	if remaining < 0 {
+		remaining = 0
 	}
+	parts = append(parts, fmt.Sprintf("Next refresh: %.0fs", remaining.Seconds()))
 
 	if m.err != nil {
 		parts = append(parts, ErrorStyle.Render("⚠ error"))
@@ -1179,6 +1193,9 @@ func (m *Model) fetchAddAssetCmd(kind model.AssetKind, market, code string) tea.
 				return assetAddedMsg{kind: kind, code: code, err: err}
 			}
 			_ = m.store.UpdateFundName(code, name)
+			if snaps, err := m.fetcher.FetchHistory(code, 30); err == nil {
+				_ = m.store.SaveNavSnapshots(snaps)
+			}
 			return assetAddedMsg{kind: kind, code: code, name: name}
 		}
 
@@ -1203,44 +1220,55 @@ func (m *Model) fetchDetailCmd(code string) tea.Cmd {
 	return func() tea.Msg {
 		snaps, err := m.store.GetNavHistory(code, 60)
 		if err != nil {
-			return detailFetchedMsg{err: err}
+			return detailFetchedMsg{kind: model.AssetKindFund, code: code, err: err}
 		}
 		if len(snaps) < 5 {
 			fetched, ferr := m.fetcher.FetchHistory(code, 60)
 			if ferr != nil {
-				return detailFetchedMsg{err: ferr}
+				return detailFetchedMsg{kind: model.AssetKindFund, code: code, err: ferr}
 			}
 			_ = m.store.SaveNavSnapshots(fetched)
 			snaps = fetched
 		}
 		if len(snaps) == 0 {
-			return detailFetchedMsg{err: fmt.Errorf("no history for %s", code)}
+			return detailFetchedMsg{kind: model.AssetKindFund, code: code, err: fmt.Errorf("no history for %s", code)}
 		}
 		var chrono []model.NavSnapshot
 		for i := len(snaps) - 1; i >= 0; i-- {
 			chrono = append(chrono, snaps[i])
 		}
 		trend := analysis.TrendSummary(chrono)
-		return detailFetchedMsg{snapshots: chrono, trend: trend}
+		return detailFetchedMsg{kind: model.AssetKindFund, code: code, snapshots: chrono, trend: trend}
 	}
 }
 
 func (m *Model) fetchStockDetailCmd(market, code string) tea.Cmd {
 	return func() tea.Msg {
+		sym := market + code
+		var quote *model.Quote
+		if m.stockQuotes != nil {
+			quote = m.stockQuotes[sym]
+		}
+		if quote == nil || !quote.Available {
+			quotes, qerr := m.fetcher.FetchStockQuotes([]string{sym})
+			if qerr == nil {
+				quote = quotes[sym]
+			}
+		}
 		snaps, err := m.store.GetPriceHistory(model.AssetKindStock, market, code, 60)
 		if err != nil {
-			return detailFetchedMsg{err: err}
+			return detailFetchedMsg{kind: model.AssetKindStock, market: market, code: code, quote: quote, err: err}
 		}
 		if len(snaps) < 5 {
 			fetched, ferr := m.fetcher.FetchStockHistory(market, code, 60)
 			if ferr != nil {
-				return detailFetchedMsg{err: ferr}
+				return detailFetchedMsg{kind: model.AssetKindStock, market: market, code: code, quote: quote, err: ferr}
 			}
 			_ = m.store.SavePriceSnapshots(fetched)
 			snaps = fetched
 		}
 		if len(snaps) == 0 {
-			return detailFetchedMsg{err: fmt.Errorf("no stock history for %s%s", market, code)}
+			return detailFetchedMsg{kind: model.AssetKindStock, market: market, code: code, quote: quote, err: fmt.Errorf("no stock history for %s%s", market, code)}
 		}
 		chrono := append([]model.PriceSnapshot(nil), snaps...)
 		sort.Slice(chrono, func(i, j int) bool {
@@ -1251,7 +1279,7 @@ func (m *Model) fetchStockDetailCmd(market, code string) tea.Cmd {
 			closes[i] = snap.Close
 		}
 		trend := analysis.TrendSummaryFromValues(closes)
-		return detailFetchedMsg{priceSnapshots: chrono, trend: trend}
+		return detailFetchedMsg{kind: model.AssetKindStock, market: market, code: code, quote: quote, priceSnapshots: chrono, trend: trend}
 	}
 }
 
