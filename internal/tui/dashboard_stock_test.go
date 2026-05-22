@@ -10,6 +10,8 @@ import (
 	"fund-trace/internal/config"
 	"fund-trace/internal/model"
 	"fund-trace/internal/notifier"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 var errTestDetailFetch = errors.New("fetch kline sh:588790")
@@ -184,6 +186,27 @@ func TestSettingsIncludesColorSchemeToggle(t *testing.T) {
 	}
 	if got := m.settingsFieldValue(4); got != "Red Up / Green Down" {
 		t.Fatalf("expected toggled scheme label, got %q", got)
+	}
+}
+
+func TestSettingsEnterCommitsNumericEdit(t *testing.T) {
+	input := newTextInput()
+	input.SetValue("120")
+	m := &Model{
+		mode:              modeSettings,
+		appConfig:         &config.Config{Settings: config.DefaultSettings()},
+		settingsIdx:       0,
+		settingsEditing:   true,
+		settingsEditInput: input,
+	}
+
+	_, _ = m.updateSettings(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.settingsEditing {
+		t.Fatal("expected enter to leave settings edit mode")
+	}
+	if got := m.appConfig.Settings.RefreshIntervalSec; got != 120 {
+		t.Fatalf("expected refresh interval to be committed, got %d", got)
 	}
 }
 

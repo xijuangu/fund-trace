@@ -384,49 +384,43 @@ func (m *Model) updateAlertSet(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.settingsEditing {
+		switch msg.String() {
+		case "enter":
+			val := parseFloatOrZero(m.settingsEditInput.Value())
+			m.applySettingsValue(m.settingsIdx, int(val))
+			m.settingsEditing = false
+			return m, nil
+		case "esc":
+			m.settingsEditing = false
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.settingsEditInput, cmd = m.settingsEditInput.Update(msg)
+			return m, cmd
+		}
+	}
+
 	switch msg.String() {
 	case "j", "down":
-		if !m.settingsEditing {
-			m.settingsIdx = min(m.settingsIdx+1, 4)
-		}
+		m.settingsIdx = min(m.settingsIdx+1, 4)
 	case "k", "up":
-		if !m.settingsEditing {
-			m.settingsIdx = max(m.settingsIdx-1, 0)
-		}
+		m.settingsIdx = max(m.settingsIdx-1, 0)
 	case "enter":
-		if !m.settingsEditing {
-			if m.settingsIdx == 4 {
-				m.applySettingsValue(m.settingsIdx, 0)
-				return m, nil
-			}
-			m.settingsEditing = true
-			ti := newTextInput()
-			ti.Width = 10
-			ti.CharLimit = 6
-			ti.SetValue(m.settingsFieldValue(m.settingsIdx))
-			ti.Focus()
-			m.settingsEditInput = ti
+		if m.settingsIdx == 4 {
+			m.applySettingsValue(m.settingsIdx, 0)
+			return m, nil
 		}
+		m.settingsEditing = true
+		ti := newTextInput()
+		ti.Width = 10
+		ti.CharLimit = 6
+		ti.SetValue(m.settingsFieldValue(m.settingsIdx))
+		ti.Focus()
+		m.settingsEditInput = ti
 	case "esc":
-		if m.settingsEditing {
-			m.settingsEditing = false
-		} else {
-			m.appConfig.Save(m.configPath)
-			m.mode = modeNormal
-		}
-	default:
-		if m.settingsEditing {
-			switch msg.String() {
-			case "enter":
-				val := parseFloatOrZero(m.settingsEditInput.Value())
-				m.applySettingsValue(m.settingsIdx, int(val))
-				m.settingsEditing = false
-			default:
-				var cmd tea.Cmd
-				m.settingsEditInput, cmd = m.settingsEditInput.Update(msg)
-				return m, cmd
-			}
-		}
+		m.appConfig.Save(m.configPath)
+		m.mode = modeNormal
 	}
 	return m, nil
 }
