@@ -777,12 +777,13 @@ func (m *Model) fetchDataCmd() tea.Cmd {
 			if err != nil || len(snaps) == 0 {
 				continue
 			}
-			// Nav history comes back descending by date; reverse to oldest→newest.
-			// Use daily change % for sparklines so each block directly represents
-			// the day's gain/loss magnitude.
 			values := make([]float64, len(snaps))
 			for i, snap := range snaps {
 				values[len(snaps)-1-i] = snap.DailyGrowthPct
+			}
+			// Append today's real-time change so the rightmost block reflects now.
+			if fund, ok := funds[code]; ok && fund != nil && fund.Available {
+				values = append(values, fund.DailyChangePct)
 			}
 			navHist[code] = values
 		}
