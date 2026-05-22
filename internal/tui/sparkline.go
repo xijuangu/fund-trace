@@ -4,9 +4,17 @@ import "math"
 
 var blockChars = []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
 
-func Sparkline(values []float64, width int) string {
+// SparkBlock pairs a rendered character with the bucket's average value.
+type SparkBlock struct {
+	Char  rune
+	Value float64
+}
+
+// Sparkline returns blocks where Char encodes the relative height and Value
+// is the bucket's average daily change %, for per-block coloring.
+func Sparkline(values []float64, width int) []SparkBlock {
 	if len(values) == 0 || width <= 0 {
-		return ""
+		return nil
 	}
 	if width > len(values) {
 		width = len(values)
@@ -14,16 +22,16 @@ func Sparkline(values []float64, width int) string {
 
 	maxAbs := maxAbs(values)
 	if maxAbs == 0 {
-		flat := make([]rune, width)
-		for i := range flat {
-			flat[i] = '▄'
+		blocks := make([]SparkBlock, width)
+		for i := range blocks {
+			blocks[i] = SparkBlock{Char: '▄', Value: 0}
 		}
-		return string(flat)
+		return blocks
 	}
 
 	rangeSize := 2 * maxAbs
 	bucketSize := float64(len(values)) / float64(width)
-	result := make([]rune, width)
+	blocks := make([]SparkBlock, width)
 
 	for i := 0; i < width; i++ {
 		start := int(float64(i) * bucketSize)
@@ -39,7 +47,7 @@ func Sparkline(values []float64, width int) string {
 		for j := start; j < end; j++ {
 			sum += values[j]
 		}
-		avg := sum / float64(end-start)
+		avg := sum / float64(end - start)
 
 		normalized := (avg + maxAbs) / rangeSize
 		idx := int(normalized * float64(len(blockChars)-1))
@@ -49,10 +57,10 @@ func Sparkline(values []float64, width int) string {
 		if idx >= len(blockChars) {
 			idx = len(blockChars) - 1
 		}
-		result[i] = blockChars[idx]
+		blocks[i] = SparkBlock{Char: blockChars[idx], Value: avg}
 	}
 
-	return string(result)
+	return blocks
 }
 
 func maxAbs(values []float64) float64 {

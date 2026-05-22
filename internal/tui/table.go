@@ -57,8 +57,12 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 		trendStr := "—"
 		if navHistory != nil {
 			if history, ok := navHistory[f.Code]; ok {
-				spark := Sparkline(history, trendW)
-				trendStr = ColorizeChange(f.DailyChangePct, spark)
+				blocks := Sparkline(history, trendW)
+				var sb2 strings.Builder
+				for _, b := range blocks {
+					sb2.WriteString(ColorizeChange(b.Value, string(b.Char)))
+				}
+				trendStr = sb2.String()
 			}
 		}
 
