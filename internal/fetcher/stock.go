@@ -123,9 +123,14 @@ func ParseTencentQuote(raw, symbol string, capturedAt time.Time) *model.Quote {
 	}
 
 	updateTime := fields[30]
-	if updateTime == "" || updateTime == "0" || len(updateTime) < 8 {
+	switch {
+	case updateTime == "" || updateTime == "0" || len(updateTime) < 8:
 		updateTime = capturedAt.Format("15:04:05")
-	} else if len(updateTime) >= 14 {
+	case strings.Contains(updateTime, " "):
+		// HK format: "2026/05/22 16:08:22" → take last 8 chars
+		updateTime = updateTime[len(updateTime)-8:]
+	case len(updateTime) >= 14:
+		// A-share format: "20260522145015" → extract time at offset 8
 		updateTime = updateTime[8:10] + ":" + updateTime[10:12] + ":" + updateTime[12:14]
 	}
 

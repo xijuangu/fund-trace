@@ -18,9 +18,16 @@ func (c *Client) FetchStockHistory(market, code string, days int) ([]model.Price
 		days = 60
 	}
 
-	secid := "0." + code
-	if market == "sh" {
+	var secid string
+	switch market {
+	case "sh":
 		secid = "1." + code
+	case "sz":
+		secid = "0." + code
+	case "hk":
+		secid = "116." + padLeft(code, 5, "0")
+	default:
+		secid = "0." + code
 	}
 
 	url := fmt.Sprintf(

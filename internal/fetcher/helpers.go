@@ -1,6 +1,9 @@
 package fetcher
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+)
 
 func parseFloatSafe(s string) float64 {
 	if s == "" {
@@ -11,4 +14,11 @@ func parseFloatSafe(s string) float64 {
 		return 0
 	}
 	return v
+}
+
+func padLeft(s string, n int, pad string) string {
+	if len(s) >= n {
+		return s
+	}
+	return strings.Repeat(pad, n-len(s)) + s
 }

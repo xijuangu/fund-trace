@@ -68,6 +68,9 @@ assets:
     - kind: stock
       market: sz
       code: "300458"
+    - kind: stock
+      market: hk
+      code: "00700"
 settings:
     refresh_interval_sec: 90
     alert_cooldown_min: 30
