@@ -132,8 +132,9 @@ type Model struct {
 	detailTrend          analysis.TrendResult
 	detailLoading        bool
 
-	width     int
-	height    int
+	scrollOffset int
+	width        int
+	height       int
 	err       error
 	lastFetch time.Time
 	loading   bool
@@ -195,6 +196,7 @@ func NewDashboard(
 		loading:     true,
 		mode:        modeNormal,
 		cursor:      0,
+		scrollOffset: 0,
 	}
 }
 
@@ -273,15 +275,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlF:
+		return m.scrollPageDown()
+	case tea.KeyCtrlB:
+		return m.scrollPageUp()
+	}
+
 	switch msg.String() {
 	case "j", "down":
-		if len(m.assetList) > 0 {
-			m.cursor = min(m.cursor+1, len(m.assetList)-1)
+		n := len(m.assetList)
+		if n > 0 {
+			m.cursor = min(m.cursor+1, n-1)
 		}
+		m.clampScroll()
 	case "k", "up":
 		if m.cursor > 0 {
 			m.cursor--
 		}
+		m.clampScroll()
 	case "q", "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
@@ -307,6 +319,80 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeHelp
 	}
 	return m, nil
+}
+
+func (m *Model) visibleRows() int {
+	used := 8 // header(2) + tableHeader(2) + bottom(4)
+	if m.err != nil {
+		used += 2
+	}
+	return max(1, m.height-used)
+}
+
+func (m *Model) clampScroll() {
+	vr := m.visibleRows()
+	n := len(m.assetList)
+	if n == 0 {
+		m.scrollOffset = 0
+		return
+	}
+	if m.scrollOffset > m.cursor {
+		m.scrollOffset = m.cursor
+	}
+	if m.scrollOffset+vr <= m.cursor {
+		m.scrollOffset = m.cursor - vr + 1
+	}
+	m.scrollOffset = max(0, m.scrollOffset)
+	maxOff := max(0, n-vr)
+	m.scrollOffset = min(m.scrollOffset, maxOff)
+}
+
+func (m *Model) scrollPageDown() (tea.Model, tea.Cmd) {
+	vr := m.visibleRows()
+	n := len(m.assetList)
+	if n == 0 {
+		return m, nil
+	}
+	maxOff := max(0, n-vr)
+	if m.scrollOffset >= maxOff {
+		m.cursor = n - 1
+		m.scrollOffset = max(0, m.cursor-vr+1)
+	} else {
+		m.scrollOffset = min(m.scrollOffset+vr, maxOff)
+		m.clampCursor()
+	}
+	return m, nil
+}
+
+func (m *Model) scrollPageUp() (tea.Model, tea.Cmd) {
+	vr := m.visibleRows()
+	n := len(m.assetList)
+	if n == 0 {
+		return m, nil
+	}
+	if m.scrollOffset <= 0 {
+		m.cursor = 0
+		m.scrollOffset = 0
+	} else {
+		m.scrollOffset = max(m.scrollOffset-vr, 0)
+		m.clampCursor()
+	}
+	return m, nil
+}
+
+func (m *Model) clampCursor() {
+	vr := m.visibleRows()
+	n := len(m.assetList)
+	if n == 0 {
+		return
+	}
+	if m.cursor < m.scrollOffset {
+		m.cursor = m.scrollOffset
+	}
+	if m.cursor >= m.scrollOffset+vr {
+		m.cursor = m.scrollOffset + vr - 1
+	}
+	m.cursor = max(0, min(m.cursor, n-1))
 }
 
 func (m *Model) updateConfirmDelete(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -538,7 +624,7 @@ func (m *Model) normalView() string {
 		sb.WriteString(LoadingStyle.Render("  Fetching asset data..."))
 	} else {
 		rf := m.resolveAssetList()
-		sb.WriteString(RenderAssetTable(rf, m.navHistory, m.cursor, m.width))
+		sb.WriteString(RenderAssetTable(rf, m.navHistory, m.cursor, m.scrollOffset, m.visibleRows(), m.width))
 	}
 
 	sb.WriteString("\n")
@@ -558,7 +644,7 @@ func (m *Model) overlayModal(base, modal string) string {
 func (m *Model) keyHints() string {
 	switch m.mode {
 	case modeNormal:
-		return "[q]uit  [r]efresh  [a]dd  [d]el  [A]lert  [s]ettings  [h]elp  [j/k] nav  [enter] detail"
+		return "[j/k] navigate  [ctrl+f/b] page  [enter] detail\n[a]dd  [d]el  [A]lert  [r]efresh  [s]ettings  [h]elp  [q]uit"
 	case modeAddFund:
 		return "[Enter] confirm  [Esc] cancel"
 	case modeConfirmDelete:
@@ -912,6 +998,13 @@ func (m *Model) buildStatusParts() []string {
 		remaining = 0
 	}
 	parts = append(parts, fmt.Sprintf("Next refresh: %.0fs", remaining.Seconds()))
+
+	if n := len(m.assetList); n > 0 {
+		vr := m.visibleRows()
+		first := m.scrollOffset + 1
+		last := min(m.scrollOffset+vr, n)
+		parts = append(parts, fmt.Sprintf("Rows %d–%d/%d", first, last, n))
+	}
 
 	if m.err != nil {
 		parts = append(parts, ErrorStyle.Render("⚠ error"))

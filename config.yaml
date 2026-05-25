@@ -50,6 +50,48 @@ assets:
     - kind: stock
       market: sh
       code: "512800"
+    - kind: fund
+      market: ""
+      code: "018257"
+    - kind: fund
+      market: ""
+      code: "013180"
+    - kind: fund
+      market: ""
+      code: "017938"
+    - kind: fund
+      market: ""
+      code: "015599"
+    - kind: fund
+      market: ""
+      code: "023432"
+    - kind: fund
+      market: ""
+      code: "018536"
+    - kind: fund
+      market: ""
+      code: "012969"
+    - kind: fund
+      market: ""
+      code: "004433"
+    - kind: fund
+      market: ""
+      code: "004744"
+    - kind: fund
+      market: ""
+      code: "008086"
+    - kind: fund
+      market: ""
+      code: "014332"
+    - kind: fund
+      market: ""
+      code: "007882"
+    - kind: fund
+      market: ""
+      code: "020973"
+    - kind: stock
+      market: sh
+      code: "688435"
 settings:
     refresh_interval_sec: 60
     cache_ttl_min: 6

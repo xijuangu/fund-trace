@@ -12,7 +12,7 @@ import (
 // RenderAssetTable renders a colored table of mixed fund and stock data.
 // trendHistory is optional: if non-nil, the Trend column shows sparklines
 // using historical daily change values keyed by model.QuoteKey.
-func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor int, termWidth int) string {
+func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor int, scrollOffset int, maxVisible int, termWidth int) string {
 	if len(rows) == 0 {
 		return LoadingStyle.Render("  Loading asset data...")
 	}
@@ -21,21 +21,23 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 
 	// Column widths (in terminal display columns, CJK-aware).
 	const (
-		typeW   = 6
-		mktW    = 4
-		codeW   = 8
-		valueW  = 10
-		changeW = 10
-		trendW  = 10
-		gaps    = 12 // 6 gaps × 2 spaces
+		rowNumW  = 4
+		typeW    = 6
+		mktW     = 4
+		codeW    = 8
+		valueW   = 10
+		changeW  = 10
+		trendW   = 10
+		gaps     = 14 // 7 gaps × 2 spaces
 	)
 	const nameMin = 8
-	fixedW := typeW + mktW + codeW + valueW + changeW + trendW + gaps
+	fixedW := rowNumW + typeW + mktW + codeW + valueW + changeW + trendW + gaps
 	nameW := max(nameMin, termWidth-fixedW)
 
 	// ------ Header ------
 	sb.WriteString(HeaderStyle.Render(
-		padRight("Type", typeW) + "  " +
+		padRight("#", rowNumW) + "  " +
+			padRight("Type", typeW) + "  " +
 			padRight("Mkt.", mktW) + "  " +
 			padRight("Code", codeW) + "  " +
 			padRight("Name", nameW) + "  " +
@@ -51,7 +53,10 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 	sb.WriteString("\n")
 
 	// ------ Rows ------
-	for i, r := range rows {
+	start := scrollOffset
+	end := min(scrollOffset+maxVisible, len(rows))
+	for i := start; i < end; i++ {
+		r := rows[i]
 		typeStr := "Fund"
 		mktStr := "—"
 		if r.Kind == model.AssetKindStock {
@@ -83,7 +88,10 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 			}
 		}
 
-		row := padRight(typeStr, typeW) + "  " +
+		rowNumStr := fmt.Sprintf("%*d", rowNumW, i+1)
+
+		row := padRight(rowNumStr, rowNumW) + "  " +
+			padRight(typeStr, typeW) + "  " +
 			padRight(mktStr, mktW) + "  " +
 			padRight(r.Code, codeW) + "  " +
 			padRight(name, nameW) + "  " +
