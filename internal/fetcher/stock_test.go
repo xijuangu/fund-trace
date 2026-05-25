@@ -149,7 +149,7 @@ func TestInferStockMarket(t *testing.T) {
 		{"688981", "sh", false},
 		{"430001", "", true},  // Beijing
 		{"830001", "", true},  // Beijing
-		{"12345", "", true},   // too short
+		{"12345", "hk", false},
 		{"1234567", "", true}, // too long
 		{"200001", "", true},  // unknown prefix
 	}

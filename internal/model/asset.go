@@ -48,23 +48,29 @@ type Quote struct {
 	Available  bool
 }
 
-// InferStockMarket guesses the market from a 6-digit A-share stock code.
-// Rules: codes starting with "6" → "sh", "0" or "3" → "sz".
-// Codes starting with "4" or "8" are Beijing Stock Exchange → returns error.
-// Returns ("", error) if the code cannot be inferred.
+// InferStockMarket guesses the market from a stock code.
+// Rules:
+//   - 5-digit codes → "hk" (Hong Kong)
+//   - 6-digit codes starting with "6" → "sh"
+//   - 6-digit codes starting with "0" or "3" → "sz"
+//   - 6-digit codes starting with "4" or "8" → Beijing (not supported)
 func InferStockMarket(code string) (string, error) {
-	if len(code) != 6 {
-		return "", &MarketError{Code: code, Reason: "stock code must be 6 digits"}
-	}
-	switch code[0] {
-	case '6':
-		return "sh", nil
-	case '0', '3':
-		return "sz", nil
-	case '4', '8':
-		return "", &MarketError{Code: code, Reason: "Beijing Stock Exchange not yet supported"}
+	switch len(code) {
+	case 5:
+		return "hk", nil
+	case 6:
+		switch code[0] {
+		case '6':
+			return "sh", nil
+		case '0', '3':
+			return "sz", nil
+		case '4', '8':
+			return "", &MarketError{Code: code, Reason: "Beijing Stock Exchange not yet supported"}
+		default:
+			return "", &MarketError{Code: code, Reason: "cannot infer market from code prefix"}
+		}
 	default:
-		return "", &MarketError{Code: code, Reason: "cannot infer market from code prefix"}
+		return "", &MarketError{Code: code, Reason: "stock code must be 5 or 6 digits"}
 	}
 }
 

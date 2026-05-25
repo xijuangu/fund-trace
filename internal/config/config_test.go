@@ -166,7 +166,7 @@ func TestValidate_InvalidCode(t *testing.T) {
 
 func TestValidate_StockWithInvalidMarket(t *testing.T) {
 	cfg := &Config{
-		Assets: []AssetEntry{{Kind: "stock", Market: "hk", Code: "00700"}},
+		Assets: []AssetEntry{{Kind: "stock", Market: "jp", Code: "00001"}},
 	}
 	err := cfg.Validate()
 	if err == nil {

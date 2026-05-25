@@ -250,8 +250,8 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("asset[%d]: invalid fund code %q (must be 6 digits)", i, a.Code)
 			}
 		} else if a.Kind == "stock" {
-			if len(a.Code) != 6 {
-				return fmt.Errorf("asset[%d]: invalid stock code %q (must be 6 digits)", i, a.Code)
+			if len(a.Code) != 6 && len(a.Code) != 5 {
+				return fmt.Errorf("asset[%d]: invalid stock code %q (must be 5 digits for HK, 6 for A-shares)", i, a.Code)
 			}
 			if a.Market == "" {
 				// Try to infer.
@@ -260,8 +260,8 @@ func (c *Config) Validate() error {
 					return fmt.Errorf("asset[%d]: %w", i, err)
 				}
 				c.Assets[i].Market = mkt
-			} else if a.Market != "sh" && a.Market != "sz" {
-				return fmt.Errorf("asset[%d]: unknown market %q for stock (expected sh or sz)", i, a.Market)
+			} else if a.Market != "sh" && a.Market != "sz" && a.Market != "hk" {
+				return fmt.Errorf("asset[%d]: unknown market %q for stock (expected sh, sz, or hk)", i, a.Market)
 			}
 		} else {
 			return fmt.Errorf("asset[%d]: unknown kind %q (expected fund or stock)", i, a.Kind)

@@ -44,8 +44,8 @@ var alertSetCmd = &cobra.Command{
 			} else {
 				code = codeArgs[0]
 			}
-			if len(code) != 6 {
-				return fmt.Errorf("invalid stock code %q: must be 6 digits", code)
+			if len(code) != 6 && len(code) != 5 {
+				return fmt.Errorf("invalid stock code %q: must be 5 digits for HK, 6 for A-shares", code)
 			}
 			if market == "" {
 				var err error
@@ -54,8 +54,8 @@ var alertSetCmd = &cobra.Command{
 					return err
 				}
 			}
-			if market != "sh" && market != "sz" {
-				return fmt.Errorf("unknown market %q (expected sh or sz)", market)
+			if market != "sh" && market != "sz" && market != "hk" {
+				return fmt.Errorf("unknown market %q (expected sh, sz, or hk)", market)
 			}
 			a.Kind = model.AssetKindStock
 			a.Market = market

@@ -282,9 +282,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
-	case tea.KeyCtrlF:
+	case tea.KeyCtrlF, tea.KeyRight:
 		return m.scrollPageDown()
-	case tea.KeyCtrlB:
+	case tea.KeyCtrlB, tea.KeyLeft:
 		return m.scrollPageUp()
 	}
 
@@ -654,7 +654,7 @@ func (m *Model) overlayModal(base, modal string) string {
 func (m *Model) keyHints() string {
 	switch m.mode {
 	case modeNormal:
-		return "[j/k] navigate  [ctrl+f/b] page  [enter] detail\n[a]dd  [d]el  [A]lert  [L] alerts  [r]efresh  [s]ettings  [h]elp  [q]uit"
+		return "[j/k] navigate  [←/→] page  [enter] detail\n[a]dd  [d]el  [A]lert  [L] alerts  [r]efresh  [s]ettings  [h]elp  [q]uit"
 	case modeAddFund:
 		return "[Enter] confirm  [Esc] cancel"
 	case modeConfirmDelete:
@@ -1200,7 +1200,7 @@ func (m *Model) fetchDataCmd() tea.Cmd {
 func (m *Model) enterAddFund() (tea.Model, tea.Cmd) {
 	m.mode = modeAddFund
 	m.textInput = newTextInput()
-	m.textInput.Placeholder = "000000 or sh600519"
+	m.textInput.Placeholder = "000000 or sh600519 or hk00700"
 	m.textInput.CharLimit = 20
 	m.textInput.Width = 30
 	m.textInput.Focus()
@@ -1218,19 +1218,27 @@ func (m *Model) updateAddFund(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Parse stock:sh:600519 format
 		if strings.HasPrefix(input, "stock:") {
 			parts := strings.SplitN(input[6:], ":", 2)
-			if len(parts) != 2 || len(parts[0]) != 2 || len(parts[1]) != 6 {
+			if len(parts) != 2 || !isAllDigits(parts[1]) {
 				return m, nil
 			}
-			return m, m.fetchAddAssetCmd(model.AssetKindStock, parts[0], parts[1])
+			codeLen := len(parts[1])
+			if (parts[0] == "sh" || parts[0] == "sz") && codeLen == 6 {
+				return m, m.fetchAddAssetCmd(model.AssetKindStock, parts[0], parts[1])
+			}
+			if parts[0] == "hk" && codeLen == 5 {
+				return m, m.fetchAddAssetCmd(model.AssetKindStock, parts[0], parts[1])
+			}
+			return m, nil
 		}
 
-		// Parse sh600519 or sz000001 format (market prefix + 6-digit code)
-		if len(input) == 8 {
+		if len(input) >= 7 {
 			prefix := input[:2]
 			code := input[2:]
+			if prefix == "hk" && len(code) == 5 && isAllDigits(code) {
+				return m, m.fetchAddAssetCmd(model.AssetKindStock, prefix, code)
+			}
 			if (prefix == "sh" || prefix == "sz") && len(code) == 6 && isAllDigits(code) {
 				return m, m.fetchAddAssetCmd(model.AssetKindStock, prefix, code)
 			}

@@ -15,10 +15,10 @@ var stockCmd = &cobra.Command{
 
 var stockAddCmd = &cobra.Command{
 	Use:   "add <code> | add <market> <code>",
-	Short: "Add an A-share stock by 6-digit code",
-	Long: `Add a Chinese A-share stock by its 6-digit code.
-Market is auto-inferred: codes starting with 6 → sh, 0 or 3 → sz.
-Specify market explicitly: fund-trace stock add sh 600519`,
+	Short: "Add a stock by code (A-share 6-digit or HK 5-digit)",
+	Long: `Add a stock by its code.
+Market is auto-inferred: 5-digit → hk, 6-digit 6→sh, 0/3→sz.
+Specify market explicitly: fund-trace stock add hk 00700`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var market, code string
@@ -28,9 +28,6 @@ Specify market explicitly: fund-trace stock add sh 600519`,
 		} else {
 			code = args[0]
 		}
-		if len(code) != 6 {
-			return fmt.Errorf("invalid stock code %q: must be 6 digits", code)
-		}
 		if market == "" {
 			var err error
 			market, err = model.InferStockMarket(code)
@@ -38,8 +35,8 @@ Specify market explicitly: fund-trace stock add sh 600519`,
 				return err
 			}
 		}
-		if market != "sh" && market != "sz" {
-			return fmt.Errorf("unknown market %q (expected sh or sz)", market)
+		if market != "sh" && market != "sz" && market != "hk" {
+			return fmt.Errorf("unknown market %q (expected sh, sz, or hk)", market)
 		}
 
 		if err := st.AddAssetSimple(model.AssetKindStock, market, code); err != nil {
@@ -66,9 +63,6 @@ var stockRemoveCmd = &cobra.Command{
 			code = args[1]
 		} else {
 			code = args[0]
-		}
-		if len(code) != 6 {
-			return fmt.Errorf("invalid stock code %q: must be 6 digits", code)
 		}
 		if market == "" {
 			var err error
