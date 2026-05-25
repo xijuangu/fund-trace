@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"sort"
 
 	"fund-trace/internal/model"
 	"fund-trace/internal/tui"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var listCmd = &cobra.Command{
@@ -41,7 +43,12 @@ var listCmd = &cobra.Command{
 		sort.Slice(rtFunds, func(i, j int) bool {
 			return rtFunds[i].Code < rtFunds[j].Code
 		})
-		fmt.Print(tui.RenderFundTable(rtFunds, nil, -1))
+
+		termW, _, err := term.GetSize(int(os.Stdout.Fd()))
+		if err != nil || termW == 0 {
+			termW = 120
+		}
+		fmt.Print(tui.RenderFundTable(rtFunds, nil, -1, termW))
 		fmt.Println()
 
 		stockEntries := cfg.StockEntries()

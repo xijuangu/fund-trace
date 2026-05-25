@@ -55,3 +55,4 @@ settings:
     cache_ttl_min: 6
     alert_cooldown_min: 30
     max_concurrent_requests: 5
+    change_color_scheme: red_up_green_down

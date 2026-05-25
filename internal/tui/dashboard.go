@@ -538,7 +538,7 @@ func (m *Model) normalView() string {
 		sb.WriteString(LoadingStyle.Render("  Fetching asset data..."))
 	} else {
 		rf := m.resolveAssetList()
-		sb.WriteString(RenderAssetTable(rf, m.navHistory, m.cursor))
+		sb.WriteString(RenderAssetTable(rf, m.navHistory, m.cursor, m.width))
 	}
 
 	sb.WriteString("\n")

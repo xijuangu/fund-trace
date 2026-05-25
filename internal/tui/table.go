@@ -12,7 +12,7 @@ import (
 // RenderAssetTable renders a colored table of mixed fund and stock data.
 // trendHistory is optional: if non-nil, the Trend column shows sparklines
 // using historical daily change values keyed by model.QuoteKey.
-func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor int) string {
+func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor int, termWidth int) string {
 	if len(rows) == 0 {
 		return LoadingStyle.Render("  Loading asset data...")
 	}
@@ -24,11 +24,14 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 		typeW   = 6
 		mktW    = 4
 		codeW   = 8
-		nameW   = 18
 		valueW  = 10
 		changeW = 10
 		trendW  = 10
+		gaps    = 12 // 6 gaps × 2 spaces
 	)
+	const nameMin = 8
+	fixedW := typeW + mktW + codeW + valueW + changeW + trendW + gaps
+	nameW := max(nameMin, termWidth-fixedW)
 
 	// ------ Header ------
 	sb.WriteString(HeaderStyle.Render(
@@ -43,7 +46,7 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 	sb.WriteString("\n")
 
 	// Separator.
-	sepLen := typeW + mktW + codeW + nameW + valueW + changeW + trendW + 12
+	sepLen := fixedW + nameW
 	sb.WriteString(strings.Repeat("─", sepLen))
 	sb.WriteString("\n")
 
@@ -113,7 +116,7 @@ func renderSparkline(history []float64, width int) string {
 // RenderFundTable renders a colored table of real-time fund data.
 // navHistory is optional: if non-nil, the Trend column shows sparklines
 // using the historical NAV values for each fund.
-func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64, cursor int) string {
+func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64, cursor int, termWidth int) string {
 	if len(funds) == 0 {
 		return LoadingStyle.Render("  Loading fund data...")
 	}
@@ -123,11 +126,14 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 	// Column widths (in terminal display columns, CJK-aware).
 	const (
 		codeW   = 8
-		nameW   = 24
 		navW    = 10
 		changeW = 12
 		trendW  = 10
+		gaps    = 8 // 4 gaps × 2 spaces
 	)
+	const nameMin = 8
+	fixedW := codeW + navW + changeW + trendW + gaps
+	nameW := max(nameMin, termWidth-fixedW)
 
 	// ------ Header ------
 	sb.WriteString(HeaderStyle.Render(
@@ -140,7 +146,7 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 	sb.WriteString("\n")
 
 	// Separator.
-	sepLen := codeW + nameW + navW + changeW + trendW + 8 // +8 for gaps
+	sepLen := fixedW + nameW
 	sb.WriteString(strings.Repeat("─", sepLen))
 	sb.WriteString("\n")
 

@@ -22,7 +22,7 @@ func TestRenderAssetTableRendersStockTrend(t *testing.T) {
 		model.QuoteKey(model.AssetKindStock, "sh", "600519"): {-1.2, 0.3, -0.8, 1.1, -1.59},
 	}
 
-	out := RenderAssetTable(rows, trends, -1)
+	out := RenderAssetTable(rows, trends, -1, 120)
 	if strings.Contains(out, "  —\n") {
 		t.Fatalf("expected stock row to render sparkline trend, got:\n%s", out)
 	}
