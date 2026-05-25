@@ -28,6 +28,7 @@ const (
 	modeAddFund
 	modeConfirmDelete
 	modeAlertSet
+	modeAlertList
 	modeSettings
 	modeDetail
 	modeHelp
@@ -123,6 +124,9 @@ type Model struct {
 	confirmTarget        *model.Asset
 	alertTarget          *model.Asset
 	alertIsRise          bool
+	alertList            []model.Alert
+	alertListCursor      int
+	alertDeleteConfirm   bool
 	settingsIdx          int
 	settingsEditing      bool
 	settingsEditInput    textinput.Model
@@ -262,6 +266,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateAddFund(msg)
 		case modeAlertSet:
 			return m.updateAlertSet(msg)
+		case modeAlertList:
+			return m.updateAlertList(msg)
 		case modeSettings:
 			return m.updateSettings(msg)
 		case modeDetail:
@@ -317,6 +323,8 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.enterDetail()
 	case "h":
 		m.mode = modeHelp
+	case "L", "shift+l":
+		m.loadAlertList()
 	}
 	return m, nil
 }
@@ -489,11 +497,11 @@ func (m *Model) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "j", "down":
-		m.settingsIdx = min(m.settingsIdx+1, 4)
+		m.settingsIdx = min(m.settingsIdx+1, 3)
 	case "k", "up":
 		m.settingsIdx = max(m.settingsIdx-1, 0)
 	case "enter":
-		if m.settingsIdx == 4 {
+		if m.settingsIdx == 3 {
 			m.applySettingsValue(m.settingsIdx, 0)
 			return m, nil
 		}
@@ -597,6 +605,8 @@ func (m *Model) View() string {
 		return m.overlayModal(base, m.confirmDeleteView())
 	case modeAlertSet:
 		return m.overlayModal(base, m.alertSetView())
+	case modeAlertList:
+		return m.overlayModal(base, m.alertListView())
 	case modeSettings:
 		return m.overlayModal(base, m.settingsView())
 	case modeHelp:
@@ -644,13 +654,15 @@ func (m *Model) overlayModal(base, modal string) string {
 func (m *Model) keyHints() string {
 	switch m.mode {
 	case modeNormal:
-		return "[j/k] navigate  [ctrl+f/b] page  [enter] detail\n[a]dd  [d]el  [A]lert  [r]efresh  [s]ettings  [h]elp  [q]uit"
+		return "[j/k] navigate  [ctrl+f/b] page  [enter] detail\n[a]dd  [d]el  [A]lert  [L] alerts  [r]efresh  [s]ettings  [h]elp  [q]uit"
 	case modeAddFund:
 		return "[Enter] confirm  [Esc] cancel"
 	case modeConfirmDelete:
 		return "[y]es delete  [n]o keep"
 	case modeAlertSet:
 		return "[Enter] confirm  [t]oggle rise/drop  [Esc] back"
+	case modeAlertList:
+		return "[j/k] navigate  [d] delete  [Esc] back"
 	case modeSettings:
 		return "[j/k] navigate  [Enter] edit/toggle  [Esc] save & back"
 	default:
@@ -729,7 +741,7 @@ func (m *Model) alertSetView() string {
 
 func (m *Model) settingsView() string {
 	var rows []string
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 4; i++ {
 		label := m.settingsFieldLabel(i)
 		value := m.settingsFieldValue(i)
 		row := fmt.Sprintf("  %s: %s", label, value)
@@ -1263,6 +1275,109 @@ func (m *Model) enterAlertSet() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) loadAlertList() {
+	alerts, err := m.store.ListAlerts()
+	if err != nil {
+		m.err = err
+		return
+	}
+	m.alertList = alerts
+	m.alertListCursor = 0
+	m.alertDeleteConfirm = false
+	m.mode = modeAlertList
+}
+
+func (m *Model) updateAlertList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.alertDeleteConfirm {
+		switch msg.String() {
+		case "y":
+			alert := m.alertList[m.alertListCursor]
+			m.store.DeleteAlert(alert.ID)
+			m.alertList = append(m.alertList[:m.alertListCursor], m.alertList[m.alertListCursor+1:]...)
+			if m.alertListCursor >= len(m.alertList) && len(m.alertList) > 0 {
+				m.alertListCursor = len(m.alertList) - 1
+			}
+			m.alertDeleteConfirm = false
+		case "n", "esc":
+			m.alertDeleteConfirm = false
+		}
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "j", "down":
+		if len(m.alertList) > 0 {
+			m.alertListCursor = min(m.alertListCursor+1, len(m.alertList)-1)
+		}
+	case "k", "up":
+		if m.alertListCursor > 0 {
+			m.alertListCursor--
+		}
+	case "d":
+		if len(m.alertList) > 0 {
+			m.alertDeleteConfirm = true
+		}
+	case "esc":
+		m.mode = modeNormal
+	}
+	return m, nil
+}
+
+func (m *Model) alertListView() string {
+	var sb strings.Builder
+	sb.WriteString(TitleStyle.Render(" Alerts "))
+	sb.WriteString("\n\n")
+
+	if len(m.alertList) == 0 {
+		sb.WriteString(StatusStyle.Render("  No alerts configured."))
+		sb.WriteString("\n\n")
+		sb.WriteString(StatusStyle.Render("[Esc] back"))
+		return DialogStyle.Render(sb.String())
+	}
+
+	sb.WriteString(HeaderStyle.Render(
+		padRight("#", 4) + padRight("Code", 10) + padRight("Type", 6) + padRight("Threshold", 10),
+	))
+	sb.WriteString("\n")
+	sb.WriteString(strings.Repeat("─", 32))
+	sb.WriteString("\n")
+
+	start := max(0, m.alertListCursor-10)
+	end := min(len(m.alertList), start+15)
+
+	for i := start; i < end; i++ {
+		a := m.alertList[i]
+		typeStr := "drop"
+		if a.Type == model.AlertRise {
+			typeStr = "rise"
+		}
+
+		name := a.FundCode
+		if name == "" {
+			name = a.Market + a.Code
+		}
+
+		row := padRight(fmt.Sprintf("%-4d", i+1), 4) +
+			padRight(name, 10) +
+			padRight(typeStr, 6) +
+			padRight(fmt.Sprintf("%+.1f%%", a.ThresholdPct), 10)
+
+		if i == m.alertListCursor {
+			row = "\033[7m" + row + "\033[0m"
+		}
+		sb.WriteString(row + "\n")
+	}
+
+	sb.WriteString("\n")
+	if m.alertDeleteConfirm {
+		alert := m.alertList[m.alertListCursor]
+		sb.WriteString(StatusStyle.Render(fmt.Sprintf("  Delete alert #%d (%s)? [y]es  [n]o", alert.ID, alert.FundCode)))
+	} else {
+		sb.WriteString(StatusStyle.Render("[j/k] navigate  [d] delete  [Esc] back"))
+	}
+	return DialogStyle.Render(sb.String())
+}
+
 func (m *Model) enterDetail() (tea.Model, tea.Cmd) {
 	if len(m.assetList) == 0 {
 		return m, nil
@@ -1290,12 +1405,10 @@ func (m *Model) settingsFieldLabel(idx int) string {
 	case 0:
 		return "Refresh Interval (sec)"
 	case 1:
-		return "Cache TTL (min)"
-	case 2:
 		return "Alert Cooldown (min)"
-	case 3:
+	case 2:
 		return "Max Concurrent Requests"
-	case 4:
+	case 3:
 		return "Change Color Scheme"
 	default:
 		return ""
@@ -1307,12 +1420,10 @@ func (m *Model) settingsFieldValue(idx int) string {
 	case 0:
 		return fmt.Sprintf("%d", m.appConfig.Settings.RefreshIntervalSec)
 	case 1:
-		return fmt.Sprintf("%d", m.appConfig.Settings.CacheTTLMin)
-	case 2:
 		return fmt.Sprintf("%d", m.appConfig.Settings.AlertCooldownMin)
-	case 3:
+	case 2:
 		return fmt.Sprintf("%d", m.appConfig.Settings.MaxConcurrentRequests)
-	case 4:
+	case 3:
 		if m.appConfig.Settings.ChangeColorScheme == ColorSchemeRedUpGreenDown {
 			return "Red Up / Green Down"
 		}
@@ -1326,13 +1437,12 @@ func (m *Model) applySettingsValue(idx int, val int) {
 	switch idx {
 	case 0:
 		m.appConfig.Settings.RefreshIntervalSec = val
+		m.config.RefreshInterval = time.Duration(val) * time.Second
 	case 1:
-		m.appConfig.Settings.CacheTTLMin = val
-	case 2:
 		m.appConfig.Settings.AlertCooldownMin = val
-	case 3:
+	case 2:
 		m.appConfig.Settings.MaxConcurrentRequests = val
-	case 4:
+	case 3:
 		if m.appConfig.Settings.ChangeColorScheme == ColorSchemeRedUpGreenDown {
 			m.appConfig.Settings.ChangeColorScheme = ColorSchemeGreenUpRedDown
 		} else {

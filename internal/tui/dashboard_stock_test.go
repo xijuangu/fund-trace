@@ -173,18 +173,18 @@ func TestSettingsIncludesColorSchemeToggle(t *testing.T) {
 		appConfig: &config.Config{Settings: config.DefaultSettings()},
 	}
 
-	if got := m.settingsFieldLabel(4); got != "Change Color Scheme" {
+	if got := m.settingsFieldLabel(3); got != "Change Color Scheme" {
 		t.Fatalf("expected color scheme settings label, got %q", got)
 	}
-	if got := m.settingsFieldValue(4); got != "Green Up / Red Down" {
+	if got := m.settingsFieldValue(3); got != "Green Up / Red Down" {
 		t.Fatalf("expected default scheme label, got %q", got)
 	}
 
-	m.applySettingsValue(4, 0)
+	m.applySettingsValue(3, 0)
 	if got := m.appConfig.Settings.ChangeColorScheme; got != "red_up_green_down" {
 		t.Fatalf("expected toggled scheme red_up_green_down, got %q", got)
 	}
-	if got := m.settingsFieldValue(4); got != "Red Up / Green Down" {
+	if got := m.settingsFieldValue(3); got != "Red Up / Green Down" {
 		t.Fatalf("expected toggled scheme label, got %q", got)
 	}
 }

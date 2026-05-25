@@ -16,7 +16,6 @@ funds:
   - code: "011925"
 settings:
   refresh_interval_sec: 60
-  cache_ttl_min: 6
   alert_cooldown_min: 30
   max_concurrent_requests: 5
 `

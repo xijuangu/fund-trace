@@ -182,7 +182,6 @@ assets:
 
 settings:
   refresh_interval_sec: 60
-  cache_ttl_min: 6
   alert_cooldown_min: 30
   max_concurrent_requests: 5
   db_path: fund-trace.db

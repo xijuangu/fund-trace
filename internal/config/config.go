@@ -36,7 +36,6 @@ type AssetEntry struct {
 
 type Settings struct {
 	RefreshIntervalSec    int    `yaml:"refresh_interval_sec"`
-	CacheTTLMin           int    `yaml:"cache_ttl_min"`
 	AlertCooldownMin      int    `yaml:"alert_cooldown_min"`
 	MaxConcurrentRequests int    `yaml:"max_concurrent_requests"`
 	DBPath                string `yaml:"db_path,omitempty"`
@@ -271,9 +270,6 @@ func (c *Config) Validate() error {
 	if c.Settings.RefreshIntervalSec <= 0 {
 		c.Settings.RefreshIntervalSec = 60
 	}
-	if c.Settings.CacheTTLMin <= 0 {
-		c.Settings.CacheTTLMin = 6
-	}
 	if c.Settings.AlertCooldownMin <= 0 {
 		c.Settings.AlertCooldownMin = 30
 	}
@@ -293,7 +289,6 @@ func (c *Config) Validate() error {
 func DefaultSettings() Settings {
 	return Settings{
 		RefreshIntervalSec:    60,
-		CacheTTLMin:           6,
 		AlertCooldownMin:      30,
 		MaxConcurrentRequests: 5,
 		ChangeColorScheme:     "green_up_red_down",
