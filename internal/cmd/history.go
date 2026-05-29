@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"time"
 
 	"fund-trace/internal/analysis"
 	"fund-trace/internal/fetcher"
@@ -29,14 +30,17 @@ var historyCmd = &cobra.Command{
 			return showStockHistory(st, fc, market, code, historyDays)
 		}
 
-		snapshots, err := st.GetNavHistory(code, historyDays)
-		if err != nil || len(snapshots) == 0 {
-			snapshots, err = fc.FetchHistory(code, historyDays)
-			if err != nil {
-				return fmt.Errorf("fetch history for %s: %w", code, err)
-			}
-			_ = st.SaveNavSnapshots(snapshots)
+	snapshots, err := st.GetNavHistory(code, historyDays)
+	if err != nil {
+		return fmt.Errorf("get nav history for %s: %w", code, err)
+	}
+	if len(snapshots) == 0 || isHistoryStale(snapshots[0].Date) {
+		snapshots, err = fc.FetchHistory(code, historyDays)
+		if err != nil {
+			return fmt.Errorf("fetch history for %s: %w", code, err)
 		}
+		_ = st.SaveNavSnapshots(snapshots)
+	}
 		if len(snapshots) == 0 {
 			return fmt.Errorf("no history data for fund %s", code)
 		}
@@ -122,7 +126,10 @@ var historyStockCmd = &cobra.Command{
 
 func showStockHistory(st *store.Store, fc *fetcher.Client, market, code string, days int) error {
 	snapshots, err := st.GetPriceHistory(model.AssetKindStock, market, code, days)
-	if err != nil || len(snapshots) == 0 {
+	if err != nil {
+		return fmt.Errorf("get price history for %s:%s: %w", market, code, err)
+	}
+	if len(snapshots) == 0 || isHistoryStale(snapshots[0].Date) {
 		snapshots, err = fc.FetchStockHistory(market, code, days)
 		if err != nil {
 			return fmt.Errorf("fetch stock history for %s:%s: %w", market, code, err)
@@ -184,6 +191,14 @@ func showStockHistory(st *store.Store, fc *fetcher.Client, market, code string, 
 	}
 	fmt.Println()
 	return nil
+}
+
+func isHistoryStale(latestDate string) bool {
+	t, err := time.Parse("2006-01-02", latestDate)
+	if err != nil {
+		return true
+	}
+	return time.Since(t) > 24*time.Hour
 }
 
 func init() {

@@ -1512,7 +1512,7 @@ func (m *Model) fetchDetailCmd(code string) tea.Cmd {
 		if err != nil {
 			return detailFetchedMsg{kind: model.AssetKindFund, code: code, err: err}
 		}
-		if len(snaps) < 5 {
+		if len(snaps) == 0 || isNavStale(snaps[0].Date) {
 			fetched, ferr := m.fetcher.FetchHistory(code, 60)
 			if ferr != nil {
 				return detailFetchedMsg{kind: model.AssetKindFund, code: code, err: ferr}
@@ -1549,7 +1549,7 @@ func (m *Model) fetchStockDetailCmd(market, code string) tea.Cmd {
 		if err != nil {
 			return detailFetchedMsg{kind: model.AssetKindStock, market: market, code: code, quote: quote, err: err}
 		}
-		if len(snaps) < 5 {
+		if len(snaps) == 0 || isNavStale(snaps[0].Date) {
 			fetched, ferr := m.fetcher.FetchStockHistory(market, code, 60)
 			if ferr != nil {
 				return detailFetchedMsg{kind: model.AssetKindStock, market: market, code: code, quote: quote, err: ferr}
@@ -1596,6 +1596,14 @@ func or(a, b string) string {
 		return a
 	}
 	return b
+}
+
+func isNavStale(latestDate string) bool {
+	t, err := time.Parse("2006-01-02", latestDate)
+	if err != nil {
+		return true
+	}
+	return time.Since(t) > 24*time.Hour
 }
 
 func isAllDigits(s string) bool {
