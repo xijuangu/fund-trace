@@ -137,6 +137,39 @@ func TestParseTencentQuote_MultiLineResponse(t *testing.T) {
 	}
 }
 
+func TestParseTencentQuote_HKStock(t *testing.T) {
+	// Simulated HK stock response for Tencent (hk00700).
+	// Key differences from A-share: fields[30] = "2026/05/22 16:08:22" timestamp,
+	// fields[31] = absolute change (NOT change%), fields[32] = change%.
+	hkSample := `v_hk00700="100~腾讯控股~00700~481.600~436.000~439.000~34416981~17889880~16527101~481.400~200~481.200~300~481.000~500~480.800~100~480.600~200~481.600~100~481.800~300~482.000~200~482.200~100~482.400~200~2026/05/22 16:08:22~45.600~10.46~484.000~436.200~481.600/34416981/16353060000~34416981~1635306~0.87~12.50~481.600~1635306~2.14~3.28~598.600~436.000~1.94~10.46~1.52~436.000~481.600~11.04~-2.50~-0.52~1635306000~1635306000~~0~44180.00";`
+	q := ParseTencentQuote(hkSample, "hk00700", capturedAt)
+
+	if !q.Available {
+		t.Fatal("expected Available=true")
+	}
+	if q.Name != "腾讯控股" {
+		t.Errorf("expected name 腾讯控股, got %s", q.Name)
+	}
+	if q.Market != "hk" {
+		t.Errorf("expected market hk, got %s", q.Market)
+	}
+	if q.Code != "00700" {
+		t.Errorf("expected code 00700, got %s", q.Code)
+	}
+
+	// Verify changePct is computed from prices, not read from fields[31].
+	// fields[31] = "45.600" (absolute change in HKD, would show as +45.60% = WRONG)
+	// Expected: (481.600 - 436.000) / 436.000 * 100 ≈ 10.4587
+	expectedPct := (481.600 - 436.000) / 436.000 * 100
+	if q.ChangePct < expectedPct-0.01 || q.ChangePct > expectedPct+0.01 {
+		t.Errorf("expected change pct around %.2f%%, got %.2f%% (fields[31]=45.60 would be wrong)", expectedPct, q.ChangePct)
+	}
+
+	if q.UpdateTime != "16:08:22" {
+		t.Errorf("expected update time 16:08:22, got %s", q.UpdateTime)
+	}
+}
+
 func TestInferStockMarket(t *testing.T) {
 	tests := []struct {
 		code    string

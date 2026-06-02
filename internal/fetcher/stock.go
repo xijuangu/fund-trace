@@ -116,21 +116,22 @@ func ParseTencentQuote(raw, symbol string, capturedAt time.Time) *model.Quote {
 		}
 	}
 
-	changePct := parseFloatSafe(fields[31])
+	// Always compute from prices — field layout differs between A-shares and
+	// HK stocks (different number of order-book levels), so the indices for
+	// change% and timestamp are not stable.  Deriving from known fields 3/4 is safer.
+	changePct := (currentPrice - previousClose) / previousClose * 100
 
-	if changePct == 0 && currentPrice != previousClose {
-		changePct = (currentPrice - previousClose) / previousClose * 100
-	}
+	// Scan for the timestamp field: A-shares use "YYYYMMDDHHMMSS" (len 14+),
+	// HK uses "YYYY/MM/DD HH:MM:SS" (len 19).  Check a few candidate positions
+	// first (30 for HK, 33 for A-share) then fall back to a wider scan.
+	updateTime := findTimestamp(fields)
 
-	updateTime := fields[30]
 	switch {
-	case updateTime == "" || updateTime == "0" || len(updateTime) < 8:
+	case updateTime == "":
 		updateTime = capturedAt.Format("15:04:05")
 	case strings.Contains(updateTime, " "):
-		// HK format: "2026/05/22 16:08:22" → take last 8 chars
 		updateTime = updateTime[len(updateTime)-8:]
 	case len(updateTime) >= 14:
-		// A-share format: "20260522145015" → extract time at offset 8
 		updateTime = updateTime[8:10] + ":" + updateTime[10:12] + ":" + updateTime[12:14]
 	}
 
@@ -145,4 +146,52 @@ func ParseTencentQuote(raw, symbol string, capturedAt time.Time) *model.Quote {
 		UpdateTime: updateTime,
 		Available:  true,
 	}
+}
+
+// findTimestamp scans fields for a timestamp value.
+// A-share: "20260522145015" (len ≥ 14, all digits).
+// HK:      "2026/05/22 16:08:22" (len 19, contains "/" and " ").
+func findTimestamp(fields []string) string {
+	// Check common positions first: 30 (A-share with empty fields 30-31),
+	// 29 (HK with 20 order-book levels).
+	for _, i := range []int{30, 29, 33} {
+		if i < len(fields) && isTimestamp(fields[i]) {
+			return fields[i]
+		}
+	}
+	// Wider scan for non-standard layouts.
+	scanLimit := 35
+	if scanLimit > len(fields) {
+		scanLimit = len(fields)
+	}
+	for _, f := range fields[:scanLimit] {
+		if isTimestamp(f) {
+			return f
+		}
+	}
+	return ""
+}
+
+func isTimestamp(s string) bool {
+	if len(s) < 14 || len(s) > 19 {
+		return false
+	}
+	// A-share: 14+ digits, e.g. "20260522145015"
+	if len(s) >= 14 {
+		allDigit := true
+		for _, c := range s {
+			if c < '0' || c > '9' {
+				allDigit = false
+				break
+			}
+		}
+		if allDigit {
+			return true
+		}
+	}
+	// HK: "YYYY/MM/DD HH:MM:SS" (len 19, "/" at 4 and 7, " " at 10, ":" at 13 and 16)
+	if len(s) == 19 && s[4] == '/' && s[7] == '/' && s[10] == ' ' && s[13] == ':' && s[16] == ':' {
+		return true
+	}
+	return false
 }
