@@ -654,7 +654,8 @@ func (m *Model) overlayModal(base, modal string) string {
 func (m *Model) keyHints() string {
 	switch m.mode {
 	case modeNormal:
-		return "[j/k] navigate  [←/→] page  [enter] detail\n[a]dd  [d]el  [A]lert  [L] alerts  [r]efresh  [s]ettings  [h]elp  [q]uit"
+		return "[j/k] navigate  [←/→] page  [enter] detail\n" +
+			"[a]dd  [d]el  [A]lert  [L] alerts  [r]efresh  [s]ettings  [h]elp  [q]uit"
 	case modeAddFund:
 		return "[Enter] confirm  [Esc] cancel"
 	case modeConfirmDelete:
@@ -785,28 +786,27 @@ func (m *Model) detailView() string {
 		}
 
 		if q, ok := m.stockQuotes[sym]; ok && q != nil {
-			sb.WriteString(fmt.Sprintf("  Name:        %s\n", q.Name))
-			priceStr := fmt.Sprintf("%.2f", q.Value)
-			sb.WriteString(fmt.Sprintf("  Price:       %s\n", priceStr))
-			sb.WriteString(fmt.Sprintf("  Prev Close:  %.2f\n", q.Previous))
-			sb.WriteString(fmt.Sprintf("  Change:      %s\n", RenderChange(q.ChangePct)))
-			sb.WriteString(fmt.Sprintf("  Updated:     %s\n", q.UpdateTime))
+			sb.WriteString(fmt.Sprintf("  Name:            %s\n", q.Name))
+			sb.WriteString(fmt.Sprintf("  Price:           %.2f\n", q.Value))
+			sb.WriteString(fmt.Sprintf("  Prev Close:      %.2f\n", q.Previous))
+			sb.WriteString(fmt.Sprintf("  Change:          %s\n", RenderChange(q.ChangePct)))
+			sb.WriteString(fmt.Sprintf("  Updated:         %s\n", q.UpdateTime))
 		} else {
 			sb.WriteString(fmt.Sprintf("  Code: %s\n", m.detailAsset.Code))
 			sb.WriteString("  No quote data available.\n")
 		}
 		sb.WriteString("\n")
 		tr := m.detailTrend
-		sb.WriteString(fmt.Sprintf("  Direction:   %s\n", colorizeDirection(tr.Direction)))
-		sb.WriteString(fmt.Sprintf("  5-day change: %.2f%%\n", tr.Change5D))
+		sb.WriteString(fmt.Sprintf("  Direction:       %s\n", colorizeDirection(tr.Direction)))
+		sb.WriteString(fmt.Sprintf("  5-day change:    %s\n", RenderChange(tr.Change5D)))
 		sma5 := analysis.Latest(tr.SMA5)
 		sma20 := analysis.Latest(tr.SMA20)
 		rsi14 := analysis.Latest(tr.RSI14)
 		if !isNaN(sma5) {
-			sb.WriteString(fmt.Sprintf("  SMA(5):     %.2f\n", sma5))
+			sb.WriteString(fmt.Sprintf("  SMA(5):          %.2f\n", sma5))
 		}
 		if !isNaN(sma20) {
-			sb.WriteString(fmt.Sprintf("  SMA(20):    %.2f\n", sma20))
+			sb.WriteString(fmt.Sprintf("  SMA(20):         %.2f\n", sma20))
 		}
 		if !isNaN(rsi14) {
 			rsiLabel := "neutral"
@@ -815,7 +815,7 @@ func (m *Model) detailView() string {
 			} else if rsi14 < 30 {
 				rsiLabel = "oversold"
 			}
-			sb.WriteString(fmt.Sprintf("  RSI(14):    %.2f (%s)\n", rsi14, rsiLabel))
+			sb.WriteString(fmt.Sprintf("  RSI(14):         %.2f (%s)\n", rsi14, rsiLabel))
 		}
 		sb.WriteString("\n")
 
@@ -832,8 +832,7 @@ func (m *Model) detailView() string {
 		}
 		for i := len(show) - 1; i >= 0; i-- {
 			s := show[i]
-			chgStr := RenderChange(s.ChangePct)
-			sb.WriteString(padRight(s.Date, 14) + padRight(fmt.Sprintf("%.2f", s.Close), 12) + chgStr + "\n")
+			sb.WriteString(padRight(s.Date, 14) + padRight(fmt.Sprintf("%.2f", s.Close), 12) + RenderChange(s.ChangePct) + "\n")
 		}
 
 		sb.WriteString("\n")
@@ -861,16 +860,16 @@ func (m *Model) detailView() string {
 	}
 
 	tr := m.detailTrend
-	sb.WriteString(fmt.Sprintf("  Direction:   %s\n", colorizeDirection(tr.Direction)))
-	sb.WriteString(fmt.Sprintf("  5-day change: %.2f%%\n", tr.Change5D))
+	sb.WriteString(fmt.Sprintf("  Direction:       %s\n", colorizeDirection(tr.Direction)))
+	sb.WriteString(fmt.Sprintf("  5-day change:    %s\n", RenderChange(tr.Change5D)))
 	sma5 := analysis.Latest(tr.SMA5)
 	sma20 := analysis.Latest(tr.SMA20)
 	rsi14 := analysis.Latest(tr.RSI14)
 	if !isNaN(sma5) {
-		sb.WriteString(fmt.Sprintf("  SMA(5):     %.4f\n", sma5))
+		sb.WriteString(fmt.Sprintf("  SMA(5):          %.4f\n", sma5))
 	}
 	if !isNaN(sma20) {
-		sb.WriteString(fmt.Sprintf("  SMA(20):    %.4f\n", sma20))
+		sb.WriteString(fmt.Sprintf("  SMA(20):         %.4f\n", sma20))
 	}
 	if !isNaN(rsi14) {
 		rsiLabel := "neutral"
@@ -879,7 +878,7 @@ func (m *Model) detailView() string {
 		} else if rsi14 < 30 {
 			rsiLabel = "oversold"
 		}
-		sb.WriteString(fmt.Sprintf("  RSI(14):    %.2f (%s)\n", rsi14, rsiLabel))
+		sb.WriteString(fmt.Sprintf("  RSI(14):         %.2f (%s)\n", rsi14, rsiLabel))
 	}
 	sb.WriteString("\n")
 
@@ -896,8 +895,7 @@ func (m *Model) detailView() string {
 	}
 	for i := len(show) - 1; i >= 0; i-- {
 		s := show[i]
-		chgStr := RenderChange(s.DailyGrowthPct)
-		sb.WriteString(padRight(s.Date, 14) + padRight(fmt.Sprintf("%.4f", s.UnitNAV), 12) + chgStr + "\n")
+		sb.WriteString(padRight(s.Date, 14) + padRight(fmt.Sprintf("%.4f", s.UnitNAV), 12) + RenderChange(s.DailyGrowthPct) + "\n")
 	}
 
 	sb.WriteString("\n")
@@ -911,15 +909,27 @@ func (m *Model) helpView() string {
 		lipgloss.JoinVertical(lipgloss.Left,
 			TitleStyle.Render("Help"),
 			"",
-			"  j/k or ↑/↓   Navigate asset rows",
-			"  a             Add fund or stock (6-digit → fund, sh/sz+code → stock)",
-			"  d             Delete selected asset",
-			"  A             Set alert",
-			"  s             Open settings",
-			"  Enter         View detail",
-			"  r             Manual refresh",
-			"  h             Show this help",
-			"  q or Esc      Quit application",
+			"  Navigation",
+			"  ──────────",
+			"  j/k or ↑/↓     Navigate rows",
+			"  ←/→ or Ctrl+B/F  Page up/down",
+			"  Enter          View detail",
+			"",
+			"  Actions",
+			"  ───────",
+			"  a              Add fund or stock",
+			"                 Fund: 6-digit code (011513)",
+			"                 Stock: sh600519 / sz000001 / hk00700",
+			"  d              Delete selected asset",
+			"  A              Set alert for selected asset",
+			"  L              List all alerts",
+			"  r              Manual refresh",
+			"",
+			"  Views",
+			"  ─────",
+			"  s              Open settings",
+			"  h              Show this help",
+			"  q or Esc       Quit",
 			"",
 			StatusStyle.Render("Press any key to return"),
 		),
@@ -1371,7 +1381,7 @@ func (m *Model) alertListView() string {
 			padRight(fmt.Sprintf("%+.1f%%", a.ThresholdPct), 10)
 
 		if i == m.alertListCursor {
-			row = "\033[7m" + row + "\033[0m"
+			row = CursorStyle.Render(row)
 		}
 		sb.WriteString(row + "\n")
 	}

@@ -71,12 +71,7 @@ var listCmd = &cobra.Command{
 				sort.Strings(sortedSym)
 				for _, sym := range sortedSym {
 					q := quotes[sym]
-					chg := fmt.Sprintf("%.2f%%", q.ChangePct)
-					if q.ChangePct > 0 {
-						chg = tui.PositiveStyle.Render(chg)
-					} else if q.ChangePct < 0 {
-						chg = tui.NegativeStyle.Render(chg)
-					}
+					chg := tui.RenderChange(q.ChangePct)
 					fmt.Printf("%-4s %-8s %-20s %10.2f %10.2f %s %10s\n",
 						q.Market, q.Code, q.Name, q.Value, q.Previous, chg, q.UpdateTime)
 				}

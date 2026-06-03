@@ -36,7 +36,7 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 
 	// ------ Header ------
 	sb.WriteString(HeaderStyle.Render(
-		padRight("#", rowNumW) + "  " +
+		padLeft("#", rowNumW) + "  " +
 			padRight("Type", typeW) + "  " +
 			padRight("Mkt.", mktW) + "  " +
 			padRight("Code", codeW) + "  " +
@@ -100,7 +100,7 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 			padRight(trendStr, trendW)
 
 		if i == cursor {
-			row = "\033[7m" + row + "\033[0m"
+			row = CursorStyle.Render(row)
 		}
 		sb.WriteString(row + "\n")
 	}
@@ -183,7 +183,7 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 			padRight(trendStr, trendW)
 
 		if i == cursor {
-			row = "\033[7m" + row + "\033[0m"
+			row = CursorStyle.Render(row)
 		}
 		sb.WriteString(row + "\n")
 	}

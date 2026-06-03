@@ -26,7 +26,7 @@ var (
 	HeaderStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(cyan).
-			Padding(0, 1)
+			PaddingRight(1)
 
 	// StatusStyle is used for status bar and timestamp text.
 	StatusStyle = lipgloss.NewStyle().
@@ -60,7 +60,7 @@ var (
 	ErrorStyle = lipgloss.NewStyle().Foreground(red)
 
 	// CursorStyle highlights the currently selected fund row.
-	CursorStyle = lipgloss.NewStyle().Background(lipgloss.Color("#3C3C3C")).Foreground(lipgloss.Color("#FFFFFF"))
+	CursorStyle = lipgloss.NewStyle().Reverse(true)
 
 	// DialogStyle wraps modal dialogs with a rounded border.
 	DialogStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(cyan).Padding(2).Width(60)

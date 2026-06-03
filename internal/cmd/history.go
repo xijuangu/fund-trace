@@ -63,12 +63,7 @@ var historyCmd = &cobra.Command{
 		fmt.Printf("%-12s %10s %10s\n", "Date", "NAV", "Change%")
 		fmt.Println("─────────────────────────────────────")
 		for _, s := range recent {
-			changeStr := fmt.Sprintf("%+.2f%%", s.DailyGrowthPct)
-			if s.DailyGrowthPct > 0 {
-				changeStr = tui.PositiveStyle.Render(changeStr)
-			} else if s.DailyGrowthPct < 0 {
-				changeStr = tui.NegativeStyle.Render(changeStr)
-			}
+			changeStr := tui.RenderChange(s.DailyGrowthPct)
 			fmt.Printf("%-12s %10.4f %s\n", s.Date, s.UnitNAV, changeStr)
 		}
 
@@ -162,12 +157,7 @@ func showStockHistory(st *store.Store, fc *fetcher.Client, market, code string, 
 	fmt.Printf("%-12s %10s %10s\n", "Date", "Close", "Change%")
 	fmt.Println("─────────────────────────────────────")
 	for _, s := range recent {
-		changeStr := fmt.Sprintf("%+.2f%%", s.ChangePct)
-		if s.ChangePct > 0 {
-			changeStr = tui.PositiveStyle.Render(changeStr)
-		} else if s.ChangePct < 0 {
-			changeStr = tui.NegativeStyle.Render(changeStr)
-		}
+		changeStr := tui.RenderChange(s.ChangePct)
 		fmt.Printf("%-12s %10.2f %s\n", s.Date, s.Close, changeStr)
 	}
 
