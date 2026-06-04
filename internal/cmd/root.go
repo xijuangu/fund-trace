@@ -116,7 +116,7 @@ func fillMissingNames(st *store.Store, fc *fetcher.Client) {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "config.yaml", "path to config file")
-	rootCmd.AddCommand(listCmd, addCmd, removeCmd, historyCmd, alertCmd, exportCmd, monitorCmd, stockCmd)
+	rootCmd.AddCommand(listCmd, addCmd, removeCmd, historyCmd, backfillCmd, alertCmd, exportCmd, monitorCmd, stockCmd)
 }
 
 func Execute() {

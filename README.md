@@ -152,6 +152,17 @@ $ fund-trace alert set stock sh 600519 --rise 5
 
 按 ID 移除告警。
 
+### `fund-trace backfill [--days N] [--sleep-ms N]`
+
+批量回填所有已跟踪基金的历史净值数据到本地 SQLite。
+
+```bash
+$ fund-trace backfill --days 5000
+$ fund-trace backfill --days 5000 --sleep-ms 500
+```
+
+`--days` 控制每只基金拉取的历史净值条数（默认 5000），`--sleep-ms` 控制基金之间的请求间隔（默认 300ms），避免触发反爬。
+
 ### `fund-trace export [--format csv|html]`
 
 导出基金和股票实时数据。
