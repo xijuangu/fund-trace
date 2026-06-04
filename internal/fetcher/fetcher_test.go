@@ -461,41 +461,51 @@ func fetchRealTimeFromServer(server *httptest.Server, client *Client, code strin
 }
 
 func fetchHistoryFromServer(server *httptest.Server, client *Client, code string, days int) ([]model.NavSnapshot, error) {
-	url := fmt.Sprintf("%s/?fundCode=%s&pageIndex=1&pageSize=%d", server.URL, code, days)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create request %s: %w", code, err)
-	}
-	req.Header.Set("Referer", "http://fundf10.eastmoney.com/")
+	now := time.Now()
+	var allSnapshots []model.NavSnapshot
 
-	resp, err := client.DoWithRetry(req, 2)
-	if err != nil {
-		return nil, fmt.Errorf("fetch history %s: %w", code, err)
-	}
-	defer resp.Body.Close()
+	for pageIndex := 1; len(allSnapshots) < days; pageIndex++ {
+		url := fmt.Sprintf("%s/?fundCode=%s&pageIndex=%d&pageSize=20", server.URL, code, pageIndex)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create request %s: %w", code, err)
+		}
+		req.Header.Set("Referer", "http://fundf10.eastmoney.com/")
 
-	var hist historyResponse
-	if err := json.NewDecoder(resp.Body).Decode(&hist); err != nil {
-		return nil, fmt.Errorf("decode history %s: %w", code, err)
+		resp, err := client.DoWithRetry(req, 2)
+		if err != nil {
+			return nil, fmt.Errorf("fetch history %s: %w", code, err)
+		}
+
+		var hist historyResponse
+		decodeErr := json.NewDecoder(resp.Body).Decode(&hist)
+		resp.Body.Close()
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("decode history %s page %d: %w", code, pageIndex, decodeErr)
+		}
+
+		for _, item := range hist.Data.LSJZList {
+			allSnapshots = append(allSnapshots, model.NavSnapshot{
+				FundCode:       code,
+				Date:           item.FSRQ,
+				UnitNAV:        parseFloatSafe(item.DWJZ),
+				AccumulatedNAV: parseFloatSafe(item.LJJZ),
+				DailyGrowthPct: parseFloatSafe(item.JZZZL),
+				RecordedAt:     now,
+			})
+		}
+
+		if len(hist.Data.LSJZList) < 20 {
+			break
+		}
 	}
 
-	if len(hist.Data.LSJZList) == 0 {
+	if len(allSnapshots) == 0 {
 		return nil, fmt.Errorf("no history data for fund %s", code)
 	}
 
-	now := time.Now()
-	var snapshots []model.NavSnapshot
-	for _, item := range hist.Data.LSJZList {
-		snapshots = append(snapshots, model.NavSnapshot{
-			FundCode:       code,
-			Date:           item.FSRQ,
-			UnitNAV:        parseFloatSafe(item.DWJZ),
-			AccumulatedNAV: parseFloatSafe(item.LJJZ),
-			DailyGrowthPct: parseFloatSafe(item.JZZZL),
-			RecordedAt:     now,
-		})
-	}
-	return snapshots, nil
+	return allSnapshots, nil
 }
 
 func fetchFundListFromServer(server *httptest.Server, client *Client) ([]model.FundListEntry, error) {

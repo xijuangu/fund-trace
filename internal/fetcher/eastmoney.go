@@ -19,55 +19,68 @@ type historyResponse struct {
 			LJJZ  string `json:"LJJZ"`
 			JZZZL string `json:"JZZZL"`
 		} `json:"LSJZList"`
+		TotalCount int `json:"TotalCount"`
 	} `json:"Data"`
 	ErrCode int    `json:"ErrCode"`
 	ErrMsg  string `json:"ErrMsg"`
 }
+
+const historyPageSize = 20
 
 func (c *Client) FetchHistory(code string, days int) ([]model.NavSnapshot, error) {
 	if days <= 0 {
 		days = 30
 	}
 
-	url := fmt.Sprintf(
-		"http://api.fund.eastmoney.com/f10/lsjz?fundCode=%s&pageIndex=1&pageSize=%d",
-		code, days,
-	)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create request %s: %w", code, err)
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-	req.Header.Set("Referer", "http://fundf10.eastmoney.com/")
+	now := time.Now()
+	var allSnapshots []model.NavSnapshot
 
-	resp, err := c.DoWithRetry(req, 2)
-	if err != nil {
-		return nil, fmt.Errorf("fetch history %s: %w", code, err)
-	}
-	defer resp.Body.Close()
+	for pageIndex := 1; len(allSnapshots) < days; pageIndex++ {
+		url := fmt.Sprintf(
+			"http://api.fund.eastmoney.com/f10/lsjz?fundCode=%s&pageIndex=%d&pageSize=%d",
+			code, pageIndex, historyPageSize,
+		)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create request %s: %w", code, err)
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+		req.Header.Set("Referer", "http://fundf10.eastmoney.com/")
 
-	var hist historyResponse
-	if err := json.NewDecoder(resp.Body).Decode(&hist); err != nil {
-		return nil, fmt.Errorf("decode history %s: %w", code, err)
+		resp, err := c.DoWithRetry(req, 2)
+		if err != nil {
+			return nil, fmt.Errorf("fetch history %s page %d: %w", code, pageIndex, err)
+		}
+
+		var hist historyResponse
+		decodeErr := json.NewDecoder(resp.Body).Decode(&hist)
+		resp.Body.Close()
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("decode history %s page %d: %w", code, pageIndex, decodeErr)
+		}
+
+		for _, item := range hist.Data.LSJZList {
+			allSnapshots = append(allSnapshots, model.NavSnapshot{
+				FundCode:       code,
+				Date:           item.FSRQ,
+				UnitNAV:        parseFloatSafe(item.DWJZ),
+				AccumulatedNAV: parseFloatSafe(item.LJJZ),
+				DailyGrowthPct: parseFloatSafe(item.JZZZL),
+				RecordedAt:     now,
+			})
+		}
+
+		if len(hist.Data.LSJZList) < historyPageSize {
+			break
+		}
 	}
 
-	if len(hist.Data.LSJZList) == 0 {
+	if len(allSnapshots) == 0 {
 		return nil, fmt.Errorf("no history data for fund %s", code)
 	}
 
-	now := time.Now()
-	var snapshots []model.NavSnapshot
-	for _, item := range hist.Data.LSJZList {
-		snapshots = append(snapshots, model.NavSnapshot{
-			FundCode:       code,
-			Date:           item.FSRQ,
-			UnitNAV:        parseFloatSafe(item.DWJZ),
-			AccumulatedNAV: parseFloatSafe(item.LJJZ),
-			DailyGrowthPct: parseFloatSafe(item.JZZZL),
-			RecordedAt:     now,
-		})
-	}
-	return snapshots, nil
+	return allSnapshots, nil
 }
 
 // fundcodeSearch response: var r = [["code","pinyin","name","type","full_pinyin"], ...]
