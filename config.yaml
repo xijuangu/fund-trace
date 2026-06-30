@@ -71,6 +71,18 @@ assets:
     - kind: stock
       market: hk
       code: "00700"
+    - kind: fund
+      market: ""
+      code: "110037"
+    - kind: fund
+      market: ""
+      code: "110038"
+    - kind: fund
+      market: ""
+      code: "003547"
+    - kind: fund
+      market: ""
+      code: "018257"
 settings:
     refresh_interval_sec: 90
     alert_cooldown_min: 30
