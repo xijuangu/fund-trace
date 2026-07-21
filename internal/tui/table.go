@@ -167,7 +167,10 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 			navStr = "—"
 		}
 
-		changeStr := RenderChange(f.DailyChangePct)
+		changeStr := "—"
+		if f.Available {
+			changeStr = RenderChange(f.DailyChangePct)
+		}
 
 		trendStr := "—"
 		if navHistory != nil {

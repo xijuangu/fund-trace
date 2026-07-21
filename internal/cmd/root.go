@@ -32,7 +32,7 @@ var rootCmd = &cobra.Command{
 	Use:   "fund-trace",
 	Short: "A high-performance Chinese fund & stock tracking CLI",
 	Long: `fund-trace fetches real-time valuations for Chinese mutual funds
-and A-share stocks from 天天基金, 东方财富, and 腾讯财经 APIs.
+and A-share stocks from 新浪财经, 东方财富, and 腾讯财经 APIs.
 
 Default behavior: launches an interactive TUI dashboard with auto-refresh.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -119,7 +119,8 @@ func init() {
 	rootCmd.AddCommand(listCmd, addCmd, removeCmd, historyCmd, backfillCmd, alertCmd, exportCmd, monitorCmd, stockCmd)
 }
 
-func Execute() {
+func Execute(version string) {
+	rootCmd.Version = version
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
