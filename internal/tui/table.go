@@ -28,10 +28,11 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 		valueW   = 10
 		changeW  = 10
 		trendW   = 10
-		gaps     = 14 // 7 gaps × 2 spaces
+		updatedW = 8
+		gaps     = 16 // 8 gaps × 2 spaces
 	)
 	const nameMin = 8
-	fixedW := rowNumW + typeW + mktW + codeW + valueW + changeW + trendW + gaps
+	fixedW := rowNumW + typeW + mktW + codeW + valueW + changeW + trendW + updatedW + gaps
 	nameW := max(nameMin, termWidth-fixedW)
 
 	// ------ Header ------
@@ -43,7 +44,8 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 			padRight("Name", nameW) + "  " +
 			padRight("Price/NAV", valueW) + "  " +
 			padRight("Change%", changeW) + "  " +
-			padRight("Trend", trendW),
+			padRight("Trend", trendW) + "  " +
+			padRight("Updated", updatedW),
 	))
 	sb.WriteString("\n")
 
@@ -78,7 +80,7 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 
 		changeStr := "—"
 		if isAvailable {
-			changeStr = RenderChange(r.ChangePct)
+			changeStr = changeCell(r.ChangePct, r.Derived, r.Uncertain)
 		}
 
 		trendStr := "—"
@@ -97,7 +99,8 @@ func RenderAssetTable(rows []AssetRow, trendHistory map[string][]float64, cursor
 			padRight(name, nameW) + "  " +
 			padRight(valueStr, valueW) + "  " +
 			padRight(changeStr, changeW) + "  " +
-			padRight(trendStr, trendW)
+			padRight(trendStr, trendW) + "  " +
+			padRight(shortUpdateTime(r.UpdateTime), updatedW)
 
 		if i == cursor {
 			row = CursorStyle.Render(row)
@@ -121,6 +124,32 @@ func renderSparkline(history []float64, width int) string {
 	return sb.String()
 }
 
+// changeCell renders a change percent, flagging values that were rebuilt from
+// the benchmark index ("~") or whose upstream sources disagree ("?").
+func changeCell(pct float64, derived, uncertain bool) string {
+	s := RenderChange(pct)
+	if derived {
+		s = "~" + s
+	}
+	if uncertain {
+		s += "?"
+	}
+	return s
+}
+
+// shortUpdateTime keeps only the clock portion of a quote timestamp so the
+// Updated column stays narrow.
+func shortUpdateTime(updateTime string) string {
+	s := strings.TrimSpace(updateTime)
+	if s == "" {
+		return "—"
+	}
+	if i := strings.LastIndex(s, " "); i >= 0 && i < len(s)-1 {
+		return s[i+1:]
+	}
+	return s
+}
+
 // RenderFundTable renders a colored table of real-time fund data.
 // navHistory is optional: if non-nil, the Trend column shows sparklines
 // using the historical NAV values for each fund.
@@ -133,14 +162,15 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 
 	// Column widths (in terminal display columns, CJK-aware).
 	const (
-		codeW   = 8
-		navW    = 10
-		changeW = 12
-		trendW  = 10
-		gaps    = 8 // 4 gaps × 2 spaces
+		codeW    = 8
+		navW     = 10
+		changeW  = 12
+		trendW   = 10
+		updatedW = 8
+		gaps     = 10 // 5 gaps × 2 spaces
 	)
 	const nameMin = 8
-	fixedW := codeW + navW + changeW + trendW + gaps
+	fixedW := codeW + navW + changeW + trendW + updatedW + gaps
 	nameW := max(nameMin, termWidth-fixedW)
 
 	// ------ Header ------
@@ -149,7 +179,8 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 			padRight("Name", nameW) + "  " +
 			padRight("NAV", navW) + "  " +
 			padRight("Change %", changeW) + "  " +
-			padRight("Trend", trendW),
+			padRight("Trend", trendW) + "  " +
+			padRight("Updated", updatedW),
 	))
 	sb.WriteString("\n")
 
@@ -169,7 +200,7 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 
 		changeStr := "—"
 		if f.Available {
-			changeStr = RenderChange(f.DailyChangePct)
+			changeStr = changeCell(f.DailyChangePct, f.Derived, f.Uncertain)
 		}
 
 		trendStr := "—"
@@ -183,7 +214,8 @@ func RenderFundTable(funds []model.RealTimeFund, navHistory map[string][]float64
 			padRight(name, nameW) + "  " +
 			padRight(navStr, navW) + "  " +
 			padRight(changeStr, changeW) + "  " +
-			padRight(trendStr, trendW)
+			padRight(trendStr, trendW) + "  " +
+			padRight(shortUpdateTime(f.UpdateTime), updatedW)
 
 		if i == cursor {
 			row = CursorStyle.Render(row)

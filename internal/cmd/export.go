@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"fund-trace/internal/model"
+	quoteSvc "fund-trace/internal/quotes"
 
 	"github.com/spf13/cobra"
 )
@@ -19,7 +20,7 @@ var exportCmd = &cobra.Command{
 	Short: "Export fund and stock data (CSV or HTML)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		codes := cfg.FundCodes()
-		funds := fc.FetchAllRealTime(codes)
+		funds := quoteSvc.New(fc, st).FundQuotes(codes)
 		var rtFunds []model.RealTimeFund
 		for _, code := range codes {
 			if rt, ok := funds[code]; ok && rt != nil {

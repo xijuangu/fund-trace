@@ -18,8 +18,11 @@ func (s *Store) AddFund(code string) error {
 }
 
 func (s *Store) AddFundWithName(code, name string, fundType model.FundType) error {
+	// Upsert instead of INSERT OR REPLACE so cached benchmark metadata
+	// (index_code/index_secid/...) survives re-adding an existing fund.
 	_, err := s.db.Exec(
-		"INSERT OR REPLACE INTO funds (code, name, type, added_at) VALUES (?, ?, ?, ?)",
+		`INSERT INTO funds (code, name, type, added_at) VALUES (?, ?, ?, ?)
+		 ON CONFLICT(code) DO UPDATE SET name = excluded.name, type = excluded.type`,
 		code, name, int(fundType), time.Now(),
 	)
 	if err != nil {
@@ -90,4 +93,44 @@ func (s *Store) UpdateFundName(code, name string) error {
 		name, code,
 	)
 	return err
+}
+
+// FundMetas returns the cached benchmark metadata for every fund, keyed by code.
+func (s *Store) FundMetas() (map[string]model.FundMeta, error) {
+	rows, err := s.db.Query(
+		"SELECT code, index_code, index_secid, index_weight, index_derive FROM funds",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list fund metas: %w", err)
+	}
+	defer rows.Close()
+
+	metas := make(map[string]model.FundMeta)
+	for rows.Next() {
+		var m model.FundMeta
+		var derive int
+		if err := rows.Scan(&m.Code, &m.IndexCode, &m.IndexSecID, &m.IndexWeight, &derive); err != nil {
+			return nil, fmt.Errorf("scan fund meta: %w", err)
+		}
+		m.DeriveOK = derive != 0
+		metas[m.Code] = m
+	}
+	return metas, rows.Err()
+}
+
+// SaveFundMeta caches a fund's benchmark metadata.
+func (s *Store) SaveFundMeta(meta model.FundMeta) error {
+	derive := 0
+	if meta.DeriveOK {
+		derive = 1
+	}
+	_, err := s.db.Exec(
+		`UPDATE funds SET index_code = ?, index_secid = ?, index_weight = ?, index_derive = ?
+		 WHERE code = ?`,
+		meta.IndexCode, meta.IndexSecID, meta.IndexWeight, derive, meta.Code,
+	)
+	if err != nil {
+		return fmt.Errorf("save fund meta %s: %w", meta.Code, err)
+	}
+	return nil
 }

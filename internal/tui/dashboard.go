@@ -12,6 +12,7 @@ import (
 	"fund-trace/internal/fetcher"
 	"fund-trace/internal/model"
 	"fund-trace/internal/notifier"
+	quoteSvc "fund-trace/internal/quotes"
 	"fund-trace/internal/store"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -97,6 +98,11 @@ type AssetRow struct {
 	Previous   float64
 	ChangePct  float64
 	UpdateTime string
+	// Derived marks a fund whose change was replaced by the index-anchored
+	// estimate; Uncertain marks a fund whose two upstream pairs disagree and
+	// no benchmark index was available to break the tie.
+	Derived   bool
+	Uncertain bool
 }
 
 // ---- Model ----
@@ -106,6 +112,7 @@ type Model struct {
 	store    *store.Store
 	fetcher  *fetcher.Client
 	notifier *notifier.Notifier
+	quotes   *quoteSvc.Service
 	config   Config
 
 	appConfig  *config.Config
@@ -139,10 +146,10 @@ type Model struct {
 	scrollOffset int
 	width        int
 	height       int
-	err       error
-	lastFetch time.Time
-	loading   bool
-	quitting  bool
+	err          error
+	lastFetch    time.Time
+	loading      bool
+	quitting     bool
 }
 
 func newTextInput() textinput.Model {
@@ -185,21 +192,22 @@ func NewDashboard(
 		store:    st,
 		fetcher:  fc,
 		notifier: nf,
+		quotes:   quoteSvc.New(fc, st),
 		config: Config{
 			RefreshInterval: refreshInterval,
 			FundCodes:       codes,
 			StockSymbols:    stockSyms,
 		},
-		appConfig:   appCfg,
-		configPath:  cfgPath,
-		assetList:   assets,
-		stockSym:    stockSyms,
-		realtime:    make(map[string]*model.RealTimeFund),
-		stockQuotes: make(map[string]*model.Quote),
-		navHistory:  make(map[string][]float64),
-		loading:     true,
-		mode:        modeNormal,
-		cursor:      0,
+		appConfig:    appCfg,
+		configPath:   cfgPath,
+		assetList:    assets,
+		stockSym:     stockSyms,
+		realtime:     make(map[string]*model.RealTimeFund),
+		stockQuotes:  make(map[string]*model.Quote),
+		navHistory:   make(map[string][]float64),
+		loading:      true,
+		mode:         modeNormal,
+		cursor:       0,
 		scrollOffset: 0,
 	}
 }
@@ -974,6 +982,8 @@ func (m *Model) resolveAssetList() []AssetRow {
 					Previous:   rt.PreviousNAV,
 					ChangePct:  rt.DailyChangePct,
 					UpdateTime: rt.UpdateTime,
+					Derived:    rt.Derived,
+					Uncertain:  rt.Uncertain,
 				})
 			} else {
 				rows = append(rows, AssetRow{
@@ -1141,13 +1151,22 @@ func heartbeatCmd() tea.Cmd {
 	})
 }
 
+// fetchFundQuotes fetches real-time estimates, reconciling stale upstream
+// values with each fund's benchmark index when the quote service is available.
+func (m *Model) fetchFundQuotes(codes []string) map[string]*model.RealTimeFund {
+	if m.quotes != nil {
+		return m.quotes.FundQuotes(codes)
+	}
+	return m.fetcher.FetchAllRealTime(codes)
+}
+
 // fetchDataCmd fetches real-time fund data, stock quotes, AND historical NAV data for sparklines.
 func (m *Model) fetchDataCmd() tea.Cmd {
 	return func() tea.Msg {
 		fundCodes := m.fundCodesForFetch()
 		stockSymbols := m.stockSymbolsForFetch()
 
-		funds := m.fetcher.FetchAllRealTime(fundCodes)
+		funds := m.fetchFundQuotes(fundCodes)
 
 		var stockQuotes map[string]*model.Quote
 		if len(stockSymbols) > 0 {

@@ -17,6 +17,11 @@ const sinaSampleNegative = `var hq_str_fu_001595="天弘中证银行ETF联接C,1
 const sinaSampleEmpty = `var hq_str_fu_110037="";`
 const sinaSampleETF = `var hq_str_fu_562500="华夏中证机器人ETF,11:32:00,0.9662,0.9349,0.9349,0.0621,3.348,2026-07-21,0.9655,3.2731";`
 
+// Captured 2026-10-20: the first valuation pair had not refreshed (+0.0341%)
+// while the second pair already tracked the benchmark index (-1.3633%). This
+// is the payload that made 红利低波 flicker between +0.03% and -1.x%.
+const sinaSampleStale020602 = `var hq_str_fu_020602="易方达中证红利低波动ETF联接发起式A,11:29:00,1.1189,1.1185,1.2175,0,0.0341,2026-10-20,1.1033,-1.3633";`
+
 func TestParseSinaFundQuote_Normal(t *testing.T) {
 	rt, ok := ParseSinaFundQuote(sinaSampleNormal)
 	if !ok {
@@ -40,6 +45,9 @@ func TestParseSinaFundQuote_Normal(t *testing.T) {
 	if rt.DailyChangePct != 0.8673 {
 		t.Errorf("DailyChangePct = %f, want 0.8673", rt.DailyChangePct)
 	}
+	if rt.AltChangePct != 0.9864 {
+		t.Errorf("AltChangePct = %f, want 0.9864 (second valuation pair)", rt.AltChangePct)
+	}
 	if rt.NAVDate != "2026-07-21" {
 		t.Errorf("NAVDate = %q, want 2026-07-21", rt.NAVDate)
 	}
@@ -61,6 +69,36 @@ func TestParseSinaFundQuote_NegativeChange(t *testing.T) {
 	}
 	if rt.EstimatedNAV != 1.6926 {
 		t.Errorf("EstimatedNAV = %f, want 1.6926", rt.EstimatedNAV)
+	}
+}
+
+// The stale payload must expose both valuation pairs so the index anchor can
+// detect that the first one has not refreshed.
+func TestParseSinaFundQuote_TwoValuationPairs(t *testing.T) {
+	rt, ok := ParseSinaFundQuote(sinaSampleStale020602)
+	if !ok || !rt.Available {
+		t.Fatal("expected an available quote")
+	}
+	if rt.DailyChangePct != 0.0341 {
+		t.Errorf("DailyChangePct = %v, want 0.0341", rt.DailyChangePct)
+	}
+	if rt.AltChangePct != -1.3633 {
+		t.Errorf("AltChangePct = %v, want -1.3633", rt.AltChangePct)
+	}
+	if rt.PreviousNAV != 1.1185 {
+		t.Errorf("PreviousNAV = %v, want 1.1185", rt.PreviousNAV)
+	}
+}
+
+// Older payloads without the second pair must still parse.
+func TestParseSinaFundQuote_AltPairOptional(t *testing.T) {
+	line := `var hq_str_fu_020602="易方达中证红利低波动ETF联接发起式A,11:33:00,1.1043,1.1185,1.2175,-1.3049,-1.272,2026-10-20";`
+	rt, ok := ParseSinaFundQuote(line)
+	if !ok || !rt.Available {
+		t.Fatal("expected an available quote")
+	}
+	if rt.AltChangePct != 0 {
+		t.Errorf("AltChangePct = %v, want 0 when the pair is absent", rt.AltChangePct)
 	}
 }
 

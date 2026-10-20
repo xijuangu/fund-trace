@@ -18,8 +18,12 @@ import (
 //
 //	var hq_str_fu_000217="华安黄金ETF联接C,11:31:00,2.9656,2.9401,2.9401,0.0101,0.8673,2026-07-21,2.9691,0.9864";
 //
-// 字段: 名称,更新时间,估算净值,昨日净值,累计净值,涨跌额,涨跌幅%,日期,...
+// 字段: 名称,更新时间,估算净值,昨日净值,累计净值,涨跌额,涨跌幅%,日期,估算净值(指数口径),涨跌幅%(指数口径)
 // 无估值数据的基金(纯债、货币等)返回空字符串: var hq_str_fu_110037="";
+//
+// 注意: 第 3/7 字段与第 9/10 字段是两套独立更新的估值，盘中可能一套已经
+// 刷新、另一套还停在旧值（表现为涨跌幅在 0.0x% 与真实值之间跳变）。因此
+// 第 10 字段只作为交叉校验的辅助值，最终展示值还要经过指数锚定校验。
 //
 // 注: 原天天基金估值接口 fundgz.1234567.com.cn 已于 2026 年 7 月下线。
 const sinaFundQuoteURL = "https://hq.sinajs.cn/list=%s"
@@ -49,6 +53,13 @@ func ParseSinaFundQuote(line string) (*model.RealTimeFund, bool) {
 		return &model.RealTimeFund{Code: code, Available: false}, true
 	}
 
+	// The second valuation pair (fields 9/10) is optional: older payloads and
+	// some fund types only carry the first pair.
+	var altChange float64
+	if len(fields) >= 10 {
+		altChange = parseFloatSafe(fields[9])
+	}
+
 	return &model.RealTimeFund{
 		Code:           code,
 		Name:           fields[0],
@@ -57,6 +68,7 @@ func ParseSinaFundQuote(line string) (*model.RealTimeFund, bool) {
 		PreviousNAV:    parseFloatSafe(fields[3]),
 		DailyChangePct: parseFloatSafe(fields[6]),
 		NAVDate:        fields[7],
+		AltChangePct:   altChange,
 		Available:      true,
 	}, true
 }

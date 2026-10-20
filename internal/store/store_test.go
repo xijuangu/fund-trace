@@ -86,6 +86,49 @@ func TestAddFundWithName(t *testing.T) {
 	}
 }
 
+func TestFundMetaCache(t *testing.T) {
+	s := openTestStore(t)
+	defer s.Close()
+
+	if err := s.AddFund("020602"); err != nil {
+		t.Fatal(err)
+	}
+	meta := model.FundMeta{
+		Code:        "020602",
+		IndexCode:   "H30269",
+		IndexSecID:  "2.H30269",
+		IndexWeight: 0.95,
+		DeriveOK:    true,
+	}
+	if err := s.SaveFundMeta(meta); err != nil {
+		t.Fatal(err)
+	}
+
+	metas, err := s.FundMetas()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := metas["020602"]
+	if !ok {
+		t.Fatal("meta cache missing 020602")
+	}
+	if got.IndexCode != "H30269" || got.IndexSecID != "2.H30269" || got.IndexWeight != 0.95 || !got.DeriveOK {
+		t.Fatalf("unexpected meta: %+v", got)
+	}
+
+	// Re-adding the fund must not wipe the cached benchmark metadata.
+	if err := s.AddFundWithName("020602", "易方达中证红利低波动ETF联接发起式A", model.FundIndex); err != nil {
+		t.Fatal(err)
+	}
+	metas, err = s.FundMetas()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metas["020602"].IndexSecID != "2.H30269" {
+		t.Fatalf("AddFundWithName wiped cached meta: %+v", metas["020602"])
+	}
+}
+
 func TestGetFundNotFound(t *testing.T) {
 	s := openTestStore(t)
 	defer s.Close()

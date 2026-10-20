@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"fund-trace/internal/model"
+	quoteSvc "fund-trace/internal/quotes"
 	"fund-trace/internal/tui"
 
 	"github.com/spf13/cobra"
@@ -17,7 +18,7 @@ var listCmd = &cobra.Command{
 	Short: "List all tracked funds and stocks with current real-time data",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		codes := cfg.FundCodes()
-		funds := fc.FetchAllRealTime(codes)
+		funds := quoteSvc.New(fc, st).FundQuotes(codes)
 		dbFunds, _ := st.ListFunds()
 		dbNames := make(map[string]string, len(dbFunds))
 		for _, f := range dbFunds {

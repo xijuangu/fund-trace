@@ -101,6 +101,21 @@ func (s *Store) Migrate() error {
 		}
 	}
 
+	// Benchmark metadata used by the index-anchored estimate validation.
+	// Cached here so each fund only needs one lookup, ever.
+	fundCols := []struct{ col, def string }{
+		{"index_code", "TEXT NOT NULL DEFAULT ''"},
+		{"index_secid", "TEXT NOT NULL DEFAULT ''"},
+		{"index_weight", "REAL NOT NULL DEFAULT 0"},
+		{"index_derive", "INTEGER NOT NULL DEFAULT 0"},
+	}
+	for _, fc := range fundCols {
+		_, err := s.db.Exec(fmt.Sprintf("ALTER TABLE funds ADD COLUMN %s %s", fc.col, fc.def))
+		if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("migrate funds add %s: %w", fc.col, err)
+		}
+	}
+
 	if _, err := s.db.Exec("UPDATE alerts SET code = fund_code WHERE code = ''"); err != nil {
 		return fmt.Errorf("migrate alerts backfill code: %w", err)
 	}
