@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	"fund-trace/internal/config"
@@ -39,6 +40,10 @@ Default behavior: launches an interactive TUI dashboard with auto-refresh.`,
 		return loadDeps()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// The TUI owns the terminal in alt-screen mode, so anything written to
+		// stderr would corrupt the layout. Send logs to a file instead.
+		redirectLogsToFile(configPath)
+
 		refresh := time.Duration(cfg.Settings.RefreshIntervalSec) * time.Second
 		dash := tui.NewDashboard(st, fc, nf, fundCodes, stocks, refresh, cfg, configPath)
 		p := tea.NewProgram(dash, tea.WithAltScreen())
@@ -47,6 +52,18 @@ Default behavior: launches an interactive TUI dashboard with auto-refresh.`,
 		}
 		return nil
 	},
+}
+
+// redirectLogsToFile sends slog output to a file while the TUI owns the
+// terminal, so stray warnings cannot corrupt the alt-screen layout. It is
+// best-effort: if the file cannot be opened, logs keep going to stderr.
+func redirectLogsToFile(cfgPath string) {
+	path := filepath.Join(filepath.Dir(cfgPath), "fund-trace.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(f, nil)))
 }
 
 func loadDeps() error {

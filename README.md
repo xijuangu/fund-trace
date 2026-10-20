@@ -39,6 +39,7 @@
 - 六张表：`funds`、`assets`、`nav_snapshots`、`price_snapshots`、`alerts`、`daily_summary`
 - 首次运行自动建库建表
 - TUI 增删操作自动写回 `config.yaml`，重启不丢失
+- TUI 模式下的日志写入配置文件同目录的 `fund-trace.log`，避免破坏全屏界面
 
 **分析**
 - SMA(5/10/20) 简单移动平均 + EMA 指数移动平均

@@ -1,6 +1,7 @@
 # Binary
 fund-trace
 fund-trace-*
+fund-trace.log
 
 # Database
 *.db

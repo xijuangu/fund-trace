@@ -67,7 +67,9 @@ func (c *Client) fetchIndexChanges(urlFormat string, secids []string) (map[strin
 		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 		req.Header.Set("Referer", "https://quote.eastmoney.com/")
 
-		resp, err := c.DoWithRetry(req, 1)
+		// This endpoint occasionally drops connections without a response, so
+		// retry more aggressively than a single extra attempt.
+		resp, err := c.DoWithRetry(req, 2)
 		if err != nil {
 			return changes, fmt.Errorf("fetch index quotes: %w", err)
 		}

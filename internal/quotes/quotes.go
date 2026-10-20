@@ -66,7 +66,9 @@ func (s *Service) FundQuotes(codes []string) map[string]*model.RealTimeFund {
 	metas := s.metasFor(codes)
 	changes := s.indexChanges(metas)
 	if n := fetcher.ApplyIndexAnchor(funds, metas, changes, s.tolerance); n > 0 {
-		slog.Info("index anchor corrected stale fund estimates", "funds", n)
+		// Debug level on purpose: the TUI owns the terminal, so anything
+		// written to stderr corrupts the alt-screen layout.
+		slog.Debug("index anchor corrected stale fund estimates", "funds", n)
 	}
 	return funds
 }
